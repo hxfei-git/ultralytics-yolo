@@ -17,12 +17,17 @@ from ultralytics import YOLO
 
 # 想找到哪些yaml是做轻量化的话可以用get_all_yaml_param_and_flops.py脚本，这个脚本里面有对应的教程视频。
 
-# YOLO11配置文件路径：ultralytics/cfg/models/11
-# YOLO12配置文件路径：ultralytics/cfg/models/12 预训练权重在这里下:https://github.com/sunsmarterjie/yolov12 Turbo版本
-# YOLO13配置文件路径：ultralytics/cfg/models/13 预训练权重在这里下:https://github.com/iMoonLab/yolov13
+#启动新会话：tmux
+#启动命名会话：tmux new -s 会话名
+#分离会话（保持后台运行）：Ctrl+b d
+#进入已有会话：tmux attach -t 会话名
+#进入最后一个会话：tmux attach 或 tmux a
+#列出所有会话：tmux ls
+#关闭指定会话：tmux kill-session -t 会话名
+#关闭所有会话：tmux kill-server
 
 if __name__ == '__main__':
-    model = YOLO('ultralytics/cfg/models/11/yolo11n.yaml') # YOLO11
+    model = YOLO('./ultralytics/cfg/models/v8/yolov8-dysample.yaml') # YOLO11
     # model.load('yolo11n.pt') # loading pretrain weights
     model.train(data='datasets/voc-ai-tod.yaml',
                 cache=False,
@@ -38,6 +43,6 @@ if __name__ == '__main__':
                 # amp=False, # close amp | loss出现nan可以关闭amp
                 # fraction=0.2,
                 project='runs/experiment',
-                name='yolo11n',
+                name='yolov8-dysample',
                 exist_ok=True,
                 )
