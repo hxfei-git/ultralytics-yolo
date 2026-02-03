@@ -26,6 +26,8 @@ from ultralytics import YOLO
 #关闭指定会话：tmux kill-session -t 会话名
 #关闭所有会话：tmux kill-server
 
+#训练后关机：python3 train.py; /usr/bin/shutdown -h now
+
 if __name__ == '__main__':
     model = YOLO('./ultralytics/cfg/models/11/yolo11n.yaml') # YOLO11
     # model.load('yolo11n.pt') # loading pretrain weights
