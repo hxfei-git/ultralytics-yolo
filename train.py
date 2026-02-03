@@ -26,8 +26,10 @@ from ultralytics import YOLO
 #关闭指定会话：tmux kill-session -t 会话名
 #关闭所有会话：tmux kill-server
 
+#训练后关机：python3 train.py; /usr/bin/shutdown -h now
+
 if __name__ == '__main__':
-    model = YOLO('./ultralytics/cfg/models/v8/yolov8-dysample.yaml') # YOLO11
+    model = YOLO('./ultralytics/cfg/models/11/yolo11-SPDConv.yaml') # YOLO11
     # model.load('yolo11n.pt') # loading pretrain weights
     model.train(data='datasets/voc-ai-tod.yaml',
                 cache=False,
@@ -43,6 +45,6 @@ if __name__ == '__main__':
                 # amp=False, # close amp | loss出现nan可以关闭amp
                 # fraction=0.2,
                 project='runs/experiment',
-                name='yolov8-dysample',
+                name='yolo11-SPDConv',
                 exist_ok=True,
                 )
