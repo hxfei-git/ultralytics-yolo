@@ -5,18 +5,6 @@ import warnings, os
 warnings.filterwarnings('ignore')
 from ultralytics import YOLO
 
-# BILIBILI UP 魔傀面具
-# 训练参数官方详解链接：https://docs.ultralytics.com/modes/train/#resuming-interrupted-trainings:~:text=a%20training%20run.-,Train%20Settings,-The%20training%20settings
-
-# 训练过程中loss出现nan，可以尝试关闭AMP，就是把下方amp=False的注释去掉。
-# 训练时候输出的AMP Check使用的YOLO11n的权重不是代表载入了预训练权重的意思，只是用于测试AMP，正常的不需要理会。
-
-# 在20250502更新中，修改保存权重的逻辑，训练结束(注意是正常训练结束后，手动停止的没有)后统一会保存4个模型，
-# 分别是best.pt、last.pt、best_fp32.pt、last_fp32.pt，其中不带fp32后缀的是fp16格式保存的，
-# 但由于有些模块对fp16非常敏感，会出现后续使用val.py的时候精度为0的情况，这种情况下可以用后缀带fp32去测试。
-
-# 想找到哪些yaml是做轻量化的话可以用get_all_yaml_param_and_flops.py脚本，这个脚本里面有对应的教程视频。
-
 #启动新会话：tmux
 #启动命名会话：tmux new -s 会话名
 #分离会话（保持后台运行）：Ctrl+b d
@@ -27,6 +15,9 @@ from ultralytics import YOLO
 #关闭所有会话：tmux kill-server
 
 #训练后关机：python3 train.py; /usr/bin/shutdown -h now
+
+#删除本地分支：git branch -d xx
+#清理远端分支：git remote prune origin --dry-run 
 
 if __name__ == '__main__':
     model = YOLO('./ultralytics/cfg/models/11/yolo11n.yaml') # YOLO11

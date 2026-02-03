@@ -1,3 +1,4 @@
+train.py
 CITATION.cff
 CONTRIBUTING.md
 datasets/
@@ -27,7 +28,6 @@ test_env.py
 tests/
 test_yaml.py
 track.py
-train.py
 transform_PGI.py
 # ultralytics/
 ultralytics.egg-info/
