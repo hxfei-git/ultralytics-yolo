@@ -20,7 +20,7 @@ from ultralytics import YOLO
 #清理远端分支：git remote prune origin --dry-run 
 
 if __name__ == '__main__':
-    model = YOLO('./ultralytics/cfg/models/11/yolo11n.yaml') # YOLO11
+    model = YOLO('ultralytics/cfg/models/v8/yolov8-SPDSlice.yaml') # YOLO11
     # model.load('yolo11n.pt') # loading pretrain weights
     model.train(data='datasets/voc-ai-tod.yaml',
                 cache=False,
@@ -36,6 +36,6 @@ if __name__ == '__main__':
                 # amp=False, # close amp | loss出现nan可以关闭amp
                 # fraction=0.2,
                 project='runs/experiment',
-                name='yolov11n',
+                name='yolov8n-SPDSlice',
                 exist_ok=True,
                 )

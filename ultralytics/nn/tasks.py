@@ -1111,7 +1111,7 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
             DGCST, RepNCSPELAN4_CAA, SRFD, DRFD, RGCSPELAN, CSP_PTB, SimpleStem, VisionClueMerge, VSSBlock_YOLO, XSSBlock, GLSA, FeaturePyramidSharedConv,
             LDConv, CSP_MSCB, CSP_PMSFA, RFAConv, RFCBAMConv, RFCAConv, CSP_FreqSpatial, MANet, MANet_FasterBlock, MANet_FasterCGLU, 
             MANet_Star, PSConv, RepHMS, CSP_MSCB_SC, LoGStem, GSConvE, DSConv_YOLO13, wConv2d, FourierConv, Converse2D, GCConv, MANet_GCConv,
-            RepStem, ESMoE
+            RepStem, ESMoE, SPDSlice, LSPDSlice
         ) + C3K2_CLASS + A2C2F_CLASS + C2PSA_CLASS):
             if args[0] == 'head_channel':
                 args[0] = d[args[0]]
@@ -1136,7 +1136,7 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
             if m in ((
                 BottleneckCSP, C1, C2, C2f, C3k2, C2fAttn, C3, C3TR, C3Ghost, C3x, RepC3, C2fPSA, C2fCIB, VoVGSCSP, VoVGSCSPns, VoVGSCSPC, RCSOSA,
                 CSPStage, SPDConv, RepBlock, CSP_EDLAN, RGCSPELAN, CSP_PTB, XSSBlock, CSP_MSCB, CSP_PMSFA, CSP_FreqSpatial, MANet,
-                MANet_FasterBlock, MANet_FasterCGLU, MANet_Star, CSP_MSCB_SC, MANet_GCConv
+                MANet_FasterBlock, MANet_FasterCGLU, MANet_Star, CSP_MSCB_SC, MANet_GCConv, SPDSlice, LSPDSlice
             ) + C3K2_CLASS + A2C2F_CLASS + C2PSA_CLASS):
                 args.insert(2, n)  # number of repeats
                 n = 1
