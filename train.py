@@ -26,7 +26,7 @@ if __name__ == '__main__':
                 cache=False,
                 imgsz=640,
                 epochs=10000,
-                batch=8,
+                batch=16,
                 close_mosaic=0, # 最后多少个epoch关闭mosaic数据增强，设置0代表全程开启mosaic训练
                 workers=8, # Windows下出现莫名其妙卡主的情况可以尝试把workers设置为0
                 # device='0,1', # 指定显卡和多卡训练参考<YOLOV11配置文件.md>下方常见错误和解决方案
