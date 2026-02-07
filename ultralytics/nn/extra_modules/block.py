@@ -2615,14 +2615,17 @@ class SPDSlice(nn.Module):
     # SPD + SliceSamp style fusion, output channel = ouc
     def __init__(self, inc, ouc, dimension=1):
         super().__init__()
-        self.conv1 = nn.Conv2d(inc * 4, ouc, kernel_size=1, stride=1, padding=0)
-        self.conv2 = nn.Conv2d(inc * 4, ouc, kernel_size=3, stride=1, padding=1)
+        # Branch 1: 1x1 conv with BN + SiLU
+        self.conv1 = Conv(inc * 4, ouc, k=1)
+        
+        # Branch 2: 3x3 conv with BN + SiLU
+        self.conv2 = Conv(inc * 4, ouc, k=3)
 
-        # 融合并降维到 ouc
-        self.fuse_conv = nn.Conv2d(ouc * 2, ouc, kernel_size=1, stride=1, padding=0)
+        # Fusion: concatenate and reduce to ouc with BN + SiLU
+        self.fuse_conv = Conv(ouc * 2, ouc, k=1)
 
     def forward(self, x):
-        # SPD 重排 -> (B, inc*4, H/2, W/2)
+        # SPD rearrangement -> (B, inc*4, H/2, W/2)
         x = torch.cat([
             x[..., ::2, ::2],
             x[..., 1::2, ::2],
@@ -2630,29 +2633,31 @@ class SPDSlice(nn.Module):
             x[..., 1::2, 1::2]
         ], dim=1)
 
-        # 两个分支
-        x1 = self.conv1(x)                  # (B, ouc, H/2, W/2)
-        x2 = self.conv2(x)                  # (B, ouc, H/2, W/2)
+        # Two parallel branches
+        x1 = self.conv1(x)   # (B, ouc, H/2, W/2)
+        x2 = self.conv2(x)   # (B, ouc, H/2, W/2)
 
-        x_cat = torch.cat([x1, x2], dim=1)  # (B, 2*ouc, H/2, W/2)
-
-        # 融合并降维到 ouc
-        x_out = self.fuse_conv(x_cat)       # (B, ouc, H/2, W/2)
+        # Concatenate and fuse
+        x_cat = torch.cat([x1, x2], dim=1)   # (B, 2*ouc, H/2, W/2)
+        x_out = self.fuse_conv(x_cat)        # (B, ouc, H/2, W/2)
         return x_out
 
 class LSPDSlice(nn.Module):
     # SPD + SliceSamp style fusion, output channel = ouc
     def __init__(self, inc, ouc, dimension=1):
         super().__init__()
-        self.conv1 = nn.Conv2d(inc * 4, ouc, kernel_size=1, stride=1, padding=0)
-        self.conv2 = nn.Conv2d(inc * 4, inc * 4, kernel_size=3, stride=1, padding=1, groups=inc * 4)
-        self.conv2_pw = nn.Conv2d(inc * 4, ouc, kernel_size=1, stride=1, padding=0)
 
-        # 融合 SPD 和 SliceSamp 特征并降维到 ouc
-        self.fuse_conv = nn.Conv2d(2 * ouc, ouc, kernel_size=1, stride=1, padding=0)
+        # Branch 1: 1x1 conv (with BN + SiLU)
+        self.conv1 = Conv(inc * 4, ouc, k=1)
+        
+        # Branch 2: Depthwise + Pointwise (both with BN + SiLU)
+        self.conv2_dw = Conv(inc * 4, inc * 4, k=3, g=inc * 4)  # depthwise
+        self.conv2_pw = Conv(inc * 4, ouc, k=1)                 # pointwise
+
+        # Fusion: combine two branches and reduce to ouc
+        self.fuse_conv = Conv(2 * ouc, ouc, k=1)
 
     def forward(self, x):
-        # SPD 重排 -> (B, inc*4, H/2, W/2)
         x = torch.cat([
             x[..., ::2, ::2],
             x[..., 1::2, ::2],
@@ -2661,13 +2666,13 @@ class LSPDSlice(nn.Module):
         ], dim=1)
 
         # 两个分支
-        x1 = self.conv1(x)                  # (B, ouc, H/2, W/2)
-        x2 = self.conv2_pw(self.conv2(x))   # (B, 4 * inc, H/2, W/2)
+        x1 = self.conv1(x)
+        x2 = self.conv2_pw(self.conv2_dw(x))
 
-        x_cat = torch.cat([x1, x2], dim=1)  # (B, ouc + 4 * inc, H/2, W/2)
+        x_cat = torch.cat([x1, x2], dim=1) 
 
         # 融合并降维到 ouc
-        x_out = self.fuse_conv(x_cat)       # (B, ouc, H/2, W/2)
+        x_out = self.fuse_conv(x_cat)
         return x_out
 
 ######################################## SPD-Conv end ########################################
