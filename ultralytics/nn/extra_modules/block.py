@@ -82,7 +82,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'C3k2_DySnakeConv', 'DCNv2', 'C3k2_DCNv2', 'DCNV3_YOLO', 'C3k2_DCNv3', 'FocalModulation',
            'C3k2_OREPA', 'C3k2_REPVGGOREPA', 'C3k2_DCNv2_Dynamic',
            'SimFusion_3in', 'SimFusion_4in', 'IFM', 'InjectionMultiSum_Auto_pool', 'PyramidPoolAgg', 'AdvPoolFusion', 'TopBasicLayer',
-           'C3k2_ContextGuided', 'C3k2_MSBlock', 'ContextGuidedBlock_Down', 'C3k2_DLKA', 'CSPStage', 'SPDConv', 'SPDSlice', 'LSPDSlice',
+           'C3k2_ContextGuided', 'C3k2_MSBlock', 'ContextGuidedBlock_Down', 'C3k2_DLKA', 'CSPStage', 'SPDConv', 'SPDSlice', 'LSPDSlice', 'FED', 'LFED',
            'BiFusion', 'RepBlock', 'C3k2_EMBC', 'SPPF_LSKA', 'C3k2_DAttention', 'C3k2_Parc', 'C3k2_DWR',
            'C3k2_RFAConv', 'C3k2_RFCBAMConv', 'C3k2_RFCAConv', 'Ghost_HGBlock', 'Rep_HGBlock',
            'C3k2_FocusedLinearAttention', 'C3k2_MLCA', 'AKConv', 'C3k2_AKConv',
@@ -158,6 +158,38 @@ class h_sigmoid(nn.Module):
     def forward(self, x):
         return self.relu(x + 3) * self.h_max / 6
 
+
+######################## Common Module ###################################
+class Channel(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dwconv = self.dconv = nn.Conv2d(
+            dim, dim, 3,
+            1, 1, groups=dim
+        )
+        self.Apt = nn.AdaptiveAvgPool2d(1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x2 = self.dwconv(x)
+        x5 = self.Apt(x2)
+        x6 = self.sigmoid(x5)
+
+        return x6
+
+class Spatial(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.conv1 = nn.Conv2d(dim, 1, 1, 1)
+        self.bn = nn.BatchNorm2d(1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x1 = self.conv1(x)
+        x5 = self.bn(x1)
+        x6 = self.sigmoid(x5)
+
+        return x6
 
 class DyReLU(nn.Module):
     def __init__(self, inp, reduction=4, lambda_a=1.0, K2=True, use_bias=True, use_spatial=False,
@@ -2673,6 +2705,116 @@ class LSPDSlice(nn.Module):
 
         # 融合并降维到 ouc
         x_out = self.fuse_conv(x_cat)
+        return x_out
+
+class FED(nn.Module):
+    """
+    Feature-Enhanced Downsampling module.
+    Input:  (B, inc, H, W)
+    Output: (B, ouc, H//2, W//2)
+    
+    Steps:
+      1. Apply space-to-depth (SPD) rearrangement to downsample spatially and expand channels (x4).
+      2. Branch 1: 1x1 conv to reduce to target channel 'ouc'.
+      3. Branch 2: 3x3 conv + spatial attention to generate adaptive weights.
+      4. Modulate Branch 1 output with spatial attention.
+      5. Fuse original and enhanced features via concatenation and 1x1 conv.
+    """
+    def __init__(self, inc, ouc, dimension=1):
+        super().__init__()
+        # Note: 'dimension' is reserved for future extension but unused currently.
+
+        # Branch 1: Channel reduction to 'ouc' after SPD
+        self.conv1 = Conv(inc * 4, ouc, k=1)
+
+        # Branch 2: Context-aware feature extraction for spatial attention generation
+        self.conv2 = Conv(inc * 4, inc * 4, k=3)
+
+        # Spatial attention module applied on Branch 2 output
+        self.spatial = Spatial(inc * 4)
+
+        # Final fusion: combine original and attention-modulated features
+        self.fuse_conv = Conv(2 * ouc, ouc, k=1)
+
+    def forward(self, x):
+        # Step 1: Space-to-Depth (SPD) rearrangement for downsampling
+        # Rearrange 2x2 non-overlapping patches into channel dimension
+        # Input:  (B, inc, H, W)
+        # Output: (B, inc*4, H//2, W//2)
+        x = torch.cat([
+            x[..., ::2, ::2],      # top-left
+            x[..., 1::2, ::2],     # bottom-left
+            x[..., ::2, 1::2],     # top-right
+            x[..., 1::2, 1::2]     # bottom-right
+        ], dim=1)
+
+        # Step 2: Dual-branch processing
+        x1 = self.conv1(x)                     # (B, ouc,   H//2, W//2) — base feature
+        x2 = self.conv2(x)                     # (B, inc*4, H//2, W//2) — context feature
+        spatial_att = self.spatial(x2)         # (B, 1,     H//2, W//2) — spatial attention map
+
+        # Step 3: Attention modulation
+        x4 = x1 * spatial_att                  # (B, ouc,   H//2, W//2) — enhanced feature
+
+        # Step 4: Feature fusion
+        x_cat = torch.cat([x1, x4], dim=1)     # (B, 2*ouc, H//2, W//2)
+        x_out = self.fuse_conv(x_cat)          # (B, ouc,   H//2, W//2)
+
+        return x_out
+
+class LFED(nn.Module):
+    """
+    Feature-Enhanced Downsampling module.
+    Input:  (B, inc, H, W)
+    Output: (B, ouc, H//2, W//2)
+    
+    Steps:
+      1. Apply space-to-depth (SPD) rearrangement to downsample spatially and expand channels (x4).
+      2. Branch 1: 1x1 conv to reduce to target channel 'ouc'.
+      3. Branch 2: 3x3 PW conv + spatial attention to generate adaptive weights.
+      4. Modulate Branch 1 output with spatial attention.
+      5. Fuse original and enhanced features via concatenation and 1x1 conv.
+    """
+    def __init__(self, inc, ouc, dimension=1):
+        super().__init__()
+        # Note: 'dimension' is reserved for future extension but unused currently.
+
+        # Branch 1: Channel reduction to 'ouc' after SPD
+        self.conv1 = Conv(inc * 4, ouc, k=1)
+
+        # Branch 2: Context-aware feature extraction for spatial attention generation
+        self.conv2 = Conv(inc * 4, inc * 4, k=3, g=inc * 4)  # depthwise
+
+        # Spatial attention module applied on Branch 2 output
+        self.spatial = Spatial(inc * 4)
+
+        # Final fusion: combine original and attention-modulated features
+        self.fuse_conv = Conv(2 * ouc, ouc, k=1)
+
+    def forward(self, x):
+        # Step 1: Space-to-Depth (SPD) rearrangement for downsampling
+        # Rearrange 2x2 non-overlapping patches into channel dimension
+        # Input:  (B, inc, H, W)
+        # Output: (B, inc*4, H//2, W//2)
+        x = torch.cat([
+            x[..., ::2, ::2],      # top-left
+            x[..., 1::2, ::2],     # bottom-left
+            x[..., ::2, 1::2],     # top-right
+            x[..., 1::2, 1::2]     # bottom-right
+        ], dim=1)
+
+        # Step 2: Dual-branch processing
+        x1 = self.conv1(x)                     # (B, ouc,   H//2, W//2) — base feature
+        x2 = self.conv2(x)                     # (B, inc*4, H//2, W//2) — context feature
+        spatial_att = self.spatial(x2)         # (B, 1,     H//2, W//2) — spatial attention map
+
+        # Step 3: Attention modulation
+        x4 = x1 * spatial_att                  # (B, ouc,   H//2, W//2) — enhanced feature
+
+        # Step 4: Feature fusion
+        x_cat = torch.cat([x1, x4], dim=1)     # (B, 2*ouc, H//2, W//2)
+        x_out = self.fuse_conv(x_cat)          # (B, ouc,   H//2, W//2)
+
         return x_out
 
 ######################################## SPD-Conv end ########################################
@@ -14178,37 +14320,6 @@ class C3k2_FasterSFSC(C3k2):
 ######################################## CVPR2024 Unleashing Channel Potential: Space-Frequency Selection Convolution for SAR Object Detection end ########################################
 
 ######################################## AAAI2025 FCM start ########################################
-
-class Channel(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.dwconv = self.dconv = nn.Conv2d(
-            dim, dim, 3,
-            1, 1, groups=dim
-        )
-        self.Apt = nn.AdaptiveAvgPool2d(1)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        x2 = self.dwconv(x)
-        x5 = self.Apt(x2)
-        x6 = self.sigmoid(x5)
-
-        return x6
-
-class Spatial(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.conv1 = nn.Conv2d(dim, 1, 1, 1)
-        self.bn = nn.BatchNorm2d(1)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        x1 = self.conv1(x)
-        x5 = self.bn(x1)
-        x6 = self.sigmoid(x5)
-
-        return x6
 
 class FCM_3(nn.Module):
     def __init__(self, dim):
