@@ -95,7 +95,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'C3k2_PPA', 'CSMHSA', 'SRFD', 'DRFD', 'CFC_CRB', 'SFC_G2', 'CGAFusion', 'CAFM', 'CAFMFusion', 'RGCSPELAN', 'C3k2_Faster_CGLU', 'SDFM', 'PSFM',
            'C3k2_Star', 'C3k2_Star_CAA', 'C3k2_KAN', 'EIEStem', 'C3k2_EIEM', 'ContextGuideFusionModule', 'C3k2_DEConv',
            'C3k2_SMPCGLU', 'C3k2_Heat', 'SBA', 'WaveletPool', 'WaveletUnPool', 'CSP_PTB', 'GLSA', 'CSPOmniKernel', 'WTConv2d', 'C3k2_WTConv',
-           'RCM', 'PyramidContextExtraction', 'DynamicInterpolationFusion', 'FuseBlockMulti', 'FeaturePyramidSharedConv', 'C3k2_FMB', 'LDConv', 'C3k2_gConv', 'C3k2_WDBB', 'C3k2_DeepDBB',
+           'RCM', 'PyramidContextExtraction', 'DynamicInterpolationFusion', 'FuseBlockMulti', 'FeaturePyramidSharedConv', 'C3k2_FMB', 'LDConv', 'C3k2_gConv', 'C3k2_WDBB', 'C3k2_DeepDBB', 'EnhanceLocalSPPF', 'RES_EnhanceLocalSPPF',
            'C3k2_AdditiveBlock', 'C3k2_AdditiveBlock_CGLU', 'CSP_MSCB', 'EUCB', 'C3k2_MSMHSA_CGLU', 'CSP_PMSFA', 'C3k2_MogaBlock', 'C3k2_SHSA', 'C3k2_SHSA_CGLU', 'C3k2_SMAFB', 'C3k2_SMAFB_CGLU',
            'DynamicAlignFusion', 'C3k2_IdentityFormer', 'C3k2_RandomMixing', 'C3k2_PoolingFormer', 'C3k2_ConvFormer', 'C3k2_CaFormer', 'C3k2_IdentityFormerCGLU', 'C3k2_RandomMixingCGLU', 'C3k2_PoolingFormerCGLU', 'C3k2_ConvFormerCGLU', 'C3k2_CaFormerCGLU',
            'C3k2_MutilScaleEdgeInformationEnhance', 'C3k2_FFCM', 'C3k2_SFHF', 'CSP_FreqSpatial', 'C3k2_MSM', 'C3k2_MutilScaleEdgeInformationSelect', 'C3k2_HDRAB', 'C3k2_RAB', 'C3k2_LFE', 'C3k2_FCA_SFA', 'C3k2_FCA_CTA', 'ConvEdgeFusion', 'MutilScaleEdgeInfoGenetator',
@@ -15721,3 +15721,53 @@ class C3k2_SFMB(C3k2):
         self.m = nn.ModuleList(C3k_SFMB(self.c, self.c, 2, shortcut, g) if c3k else SFMB(self.c) for _ in range(n))
 
 ######################################## TIP2025 SFMB end ########################################
+
+######################################## EnhanceLocalSPPF start ########################################
+class EnhanceLocalSPPF(nn.Module):
+
+    def __init__(self, c1, c2, k=5):
+        super().__init__()
+        c_ = c1 // 2
+        self.cv1 = Conv(c1, c_, 1, 1)
+        
+        # 保持通道数不变的局部上下文块
+        self.block = nn.Sequential(
+            Conv(c_, c_, k, 1, g=c_),  # depth-wise
+            Conv(c_, c_, 1, 1)         # point-wise
+        )
+        
+        self.cv2 = Conv(c_ * 4, c2, 1, 1)
+        
+    def forward(self, x):
+        x1 = self.cv1(x)
+        x2 = self.block(x1)
+        x3 = self.block(x2)
+        x4 = self.block(x3)
+    
+        return self.cv2(torch.cat([x1, x2, x3, x4], 1))
+
+class RES_EnhanceLocalSPPF(nn.Module):
+
+    def __init__(self, c1, c2, k=5):
+        super().__init__()
+        c_ = c1 // 2
+        self.cv1 = Conv(c1, c_, 1, 1)
+        
+        # 保持通道数不变的局部上下文块
+        self.block = nn.Sequential(
+            Conv(c_, c_, k, 1, g=c_),  # depth-wise
+            Conv(c_, c_, 1, 1)         # point-wise
+        )
+        
+        self.cv2 = Conv(c_ * 4, c2, 1, 1)
+        self.add = c1 == c2
+        
+    def forward(self, x):
+        x1 = self.cv1(x)
+        x2 = self.block(x1)
+        x3 = self.block(x2)
+        x4 = self.block(x3)
+        y  = self.cv2(torch.cat([x1, x2, x3, x4], 1))
+        return y + x # if self.add else y
+    
+######################################## EnhanceLocalSPPF end ########################################
