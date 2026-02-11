@@ -95,7 +95,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'C3k2_PPA', 'CSMHSA', 'SRFD', 'DRFD', 'CFC_CRB', 'SFC_G2', 'CGAFusion', 'CAFM', 'CAFMFusion', 'RGCSPELAN', 'C3k2_Faster_CGLU', 'SDFM', 'PSFM',
            'C3k2_Star', 'C3k2_Star_CAA', 'C3k2_KAN', 'EIEStem', 'C3k2_EIEM', 'ContextGuideFusionModule', 'C3k2_DEConv',
            'C3k2_SMPCGLU', 'C3k2_Heat', 'SBA', 'WaveletPool', 'WaveletUnPool', 'CSP_PTB', 'GLSA', 'CSPOmniKernel', 'WTConv2d', 'C3k2_WTConv',
-           'RCM', 'PyramidContextExtraction', 'DynamicInterpolationFusion', 'FuseBlockMulti', 'FeaturePyramidSharedConv', 'C3k2_FMB', 'LDConv', 'C3k2_gConv', 'C3k2_WDBB', 'C3k2_DeepDBB', 'EnhanceLocalSPPF', 'RES_EnhanceLocalSPPF',
+           'RCM', 'PyramidContextExtraction', 'DynamicInterpolationFusion', 'FuseBlockMulti', 'FeaturePyramidSharedConv', 'C3k2_FMB', 'LDConv', 'C3k2_gConv', 'C3k2_WDBB', 'C3k2_DeepDBB', 'EnhanceLocalSPPF', 'RES_EnhanceLocalSPPF',"CAF_EnhanceLocalSPPF",
            'C3k2_AdditiveBlock', 'C3k2_AdditiveBlock_CGLU', 'CSP_MSCB', 'EUCB', 'C3k2_MSMHSA_CGLU', 'CSP_PMSFA', 'C3k2_MogaBlock', 'C3k2_SHSA', 'C3k2_SHSA_CGLU', 'C3k2_SMAFB', 'C3k2_SMAFB_CGLU',
            'DynamicAlignFusion', 'C3k2_IdentityFormer', 'C3k2_RandomMixing', 'C3k2_PoolingFormer', 'C3k2_ConvFormer', 'C3k2_CaFormer', 'C3k2_IdentityFormerCGLU', 'C3k2_RandomMixingCGLU', 'C3k2_PoolingFormerCGLU', 'C3k2_ConvFormerCGLU', 'C3k2_CaFormerCGLU',
            'C3k2_MutilScaleEdgeInformationEnhance', 'C3k2_FFCM', 'C3k2_SFHF', 'CSP_FreqSpatial', 'C3k2_MSM', 'C3k2_MutilScaleEdgeInformationSelect', 'C3k2_HDRAB', 'C3k2_RAB', 'C3k2_LFE', 'C3k2_FCA_SFA', 'C3k2_FCA_CTA', 'ConvEdgeFusion', 'MutilScaleEdgeInfoGenetator',
@@ -15769,5 +15769,82 @@ class RES_EnhanceLocalSPPF(nn.Module):
         x4 = self.block(x3)
         y  = self.cv2(torch.cat([x1, x2, x3, x4], 1))
         return y + x # if self.add else y
-    
+
+class CAF(nn.Module):
+    def __init__(self, c, heads=4):
+        super(CAF, self).__init__()
+        self.heads = heads
+
+        # 将 x 和 y 投影到相同通道（用于 query/key/value）
+
+        self.proj_q = nn.Conv2d(c, c, kernel_size=1)
+        self.proj_k = nn.Conv2d(c, c, kernel_size=1)
+        self.proj_v = nn.Conv2d(c, c, kernel_size=1)
+        self.proj_out = nn.Conv2d(c, c, kernel_size=1)
+
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x, y):
+        """
+        x: original input, shape [B, c_x, H, W]
+        y: enhanced feature, shape [B, c_y, H, W]
+        Output: refined y, shape [B, c_y, H, W]
+        """
+        B, C, H, W = y.shape
+
+        # Project to same hidden space
+        q = self.proj_q(x)  # [B, C, H, W]
+        k = self.proj_k(y)  # [B, C, H, W]
+        v = self.proj_v(y)  # [B, C, H, W]
+
+        D = q.shape[1]
+        head_dim = C // self.heads
+
+        # Reshape for multi-head attention
+        q = q.view(B, self.heads, head_dim, -1)  # [B, h, d, N]
+        k = k.view(B, self.heads, head_dim, -1)  # [B, h, d, N]
+        v = v.view(B, self.heads, head_dim, -1)  # [B, h, d, N]
+
+        # Attention: similarity between x and y
+        attn = torch.matmul(q.permute(0, 1, 3, 2), k)       # [B, h, N, d] * [B, h, d, N] = [B, h, N, N]
+        attn = self.softmax(attn)
+
+        out = torch.matmul(v, attn.permute(0, 1, 3, 2))     # [B, h, d, N] * [B, h, N, N] = [B, h, d, N]
+        out = out.view(B, D, H, W)
+        out = self.proj_out(out)  # back to c_y
+
+        return out + y  # residual on y
+
+class CAF_EnhanceLocalSPPF(nn.Module):
+
+    def __init__(self, c1, c2, k=5, heads=4):
+        super().__init__()
+        c_ = c1 // 2
+        self.cv1 = Conv(c1, c_, 1, 1)
+
+        self.block = nn.Sequential(
+            Conv(c_, c_, k, 1, g=c_),
+            Conv(c_, c_, 1, 1)
+        )
+
+        self.cv2 = Conv(c_ * 4, c2, 1, 1)
+
+        self.align = Conv(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
+
+        self.caf = CAF(c2, heads=heads)
+
+        self.add = c1 == c2
+
+    def forward(self, x):
+        x1 = self.cv1(x)
+        x2 = self.block(x1)
+        x3 = self.block(x2)
+        x4 = self.block(x3)
+        y  = self.cv2(torch.cat([x1, x2, x3, x4], 1))
+
+        x_align = self.align(x)
+        y = self.caf(x_align, y)
+
+        return y + x if self.add else y
+
 ######################################## EnhanceLocalSPPF end ########################################

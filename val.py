@@ -19,7 +19,7 @@ def get_weight_size(path):
 if __name__ == '__main__':
     model_path = 'runs/experiment/yolo11n/weights/best.pt'
     model = YOLO(model_path) # 选择训练好的权重路径
-    result = model.val(data='datasets/voc-ai-tod.yaml',
+    result = model.val(data='../datasets/voc-ai-tod.yaml',
                         split='test', # split可以选择train、val、test 根据自己的数据集情况来选择.
                         imgsz=640,
                         batch=16,
