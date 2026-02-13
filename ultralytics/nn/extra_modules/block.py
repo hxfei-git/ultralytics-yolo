@@ -159,7 +159,7 @@ class h_sigmoid(nn.Module):
         return self.relu(x + 3) * self.h_max / 6
 
 
-######################## Common Module ###################################
+######################## Common Module Start ###################################
 class Channel(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -190,6 +190,46 @@ class Spatial(nn.Module):
         x6 = self.sigmoid(x5)
 
         return x6
+
+class CAF(nn.Module):
+    def __init__(self, c, heads=8):
+        super().__init__()
+        self.heads = heads
+
+        self.proj_q = nn.Conv2d(c, c, 1)
+        self.proj_k = nn.Conv2d(c, c, 1)
+        self.proj_v = nn.Conv2d(c, c, 1)
+        self.proj_out = Conv(c, c, 1, 1)
+
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x, y):
+        B, C, H, W = y.shape
+        assert C % self.heads == 0
+
+        q = self.proj_q(x)
+        k = self.proj_k(y)
+        v = self.proj_v(y)
+
+        head_dim = C // self.heads
+        scale    = head_dim ** -0.5
+        N        = H * W
+
+        q = q.view(B, self.heads, head_dim, N)
+        k = k.view(B, self.heads, head_dim, N)
+        v = v.view(B, self.heads, head_dim, N)
+
+        attn = torch.matmul(q.transpose(-2, -1), k) * scale
+        attn = self.softmax(attn)
+
+        out = torch.matmul(v, attn.transpose(-2, -1))
+        out = out.view(B, C, H, W)
+
+        out = self.proj_out(out)
+        return y + out
+    
+
+######################## Common Module End ###################################
 
 class DyReLU(nn.Module):
     def __init__(self, inp, reduction=4, lambda_a=1.0, K2=True, use_bias=True, use_spatial=False,
@@ -15769,52 +15809,6 @@ class RES_EnhanceLocalSPPF(nn.Module):
         x4 = self.block(x3)
         y  = self.cv2(torch.cat([x1, x2, x3, x4], 1))
         return y + x # if self.add else y
-
-class CAF(nn.Module):
-    def __init__(self, c, heads=4):
-        super(CAF, self).__init__()
-        self.heads = heads
-
-        # 将 x 和 y 投影到相同通道（用于 query/key/value）
-
-        self.proj_q = nn.Conv2d(c, c, kernel_size=1)
-        self.proj_k = nn.Conv2d(c, c, kernel_size=1)
-        self.proj_v = nn.Conv2d(c, c, kernel_size=1)
-        self.proj_out = nn.Conv2d(c, c, kernel_size=1)
-
-        self.softmax = nn.Softmax(dim=-1)
-
-    def forward(self, x, y):
-        """
-        x: original input, shape [B, c_x, H, W]
-        y: enhanced feature, shape [B, c_y, H, W]
-        Output: refined y, shape [B, c_y, H, W]
-        """
-        B, C, H, W = y.shape
-
-        # Project to same hidden space
-        q = self.proj_q(x)  # [B, C, H, W]
-        k = self.proj_k(y)  # [B, C, H, W]
-        v = self.proj_v(y)  # [B, C, H, W]
-
-        D = q.shape[1]
-        head_dim = C // self.heads
-
-        # Reshape for multi-head attention
-        q = q.view(B, self.heads, head_dim, -1)  # [B, h, d, N]
-        k = k.view(B, self.heads, head_dim, -1)  # [B, h, d, N]
-        v = v.view(B, self.heads, head_dim, -1)  # [B, h, d, N]
-
-        # Attention: similarity between x and y
-        attn = torch.matmul(q.permute(0, 1, 3, 2), k)       # [B, h, N, d] * [B, h, d, N] = [B, h, N, N]
-        attn = self.softmax(attn)
-
-        out = torch.matmul(v, attn.permute(0, 1, 3, 2))     # [B, h, d, N] * [B, h, N, N] = [B, h, d, N]
-        out = out.view(B, D, H, W)
-        out = self.proj_out(out)  # back to c_y
-
-        return out
-
 
 class CAF_EnhanceLocalSPPF(nn.Module):
 
