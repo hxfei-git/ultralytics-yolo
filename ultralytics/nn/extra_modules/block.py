@@ -106,7 +106,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'A2C2f_EDFFN', 'C3k2_EBlock', 'C3k2_DBlock', 'C3k2_FDConv', 'C3k2_MambaOut_FDConv', 'C3k2_PFDConv', 'C3k2_PFDConv', 'C3k2_FasterFD', 'C3k2_DSAN', 'C3k2_MambaOut_DSA', 'C3k2_DSA', 'C3k2_DSAN_EDFFN', 'C3k2_RMB', 'SNI', 'GSConvE', 'C3k2_SFSConv', 'C3k2_MambaOut_SFSC',
            'C3k2_MambaOut_SFSC', 'C3k2_PSFSConv', 'C3k2_FasterSFSC', 'FCM', 'FCM_1', 'FCM_2', 'FCM_3', 'Pzconv', 'C3k2_GroupMamba', 'C3k2_GroupMambaBlock', 'C3k2_MambaVision', 'C3k2_wConv', 'wConv2d', 'PST', 'C3k2_FourierConv', 'FourierConv', 'C3k2_GLVSS', 'C3k2_ESC', 'C3k2_MBRConv5',
            'C3k2_MBRConv3', 'C3k2_VSSD', 'C3k2_TVIM', 'DPCF', 'C3k2_CSI', 'C3k2_SHSA_EPGO', 'C3k2_SHSA_EPGO_CGLU', 'C3k2_ConvAttn', 'C3k2_UniConvBlock', 'C3k2_LGLB', 'C3k2_ConverseB', 'C3k2_Converse', 'C3k2_GCConv', 'GCConv', 'MANet_GCConv', 'C3k2_CFBlock', 'C3k2_FMABlock', 'C3k2_LWGA',
-           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB'
+           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF'
            ]
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -15877,3 +15877,76 @@ class CAF_RES_EnhanceLocalSPPF(nn.Module):
 
 
 ######################################## EnhanceLocalSPPF end ########################################
+
+
+
+######################################## Cross-Guided Fusion ########################################
+
+class CGF(nn.Module):
+    """
+    Cross-Guided Fusion (CGF) Module with Channel Alignment
+    - First aligns input channels via 1x1 conv
+    - Then splits each feature into attention part and content part
+    - Uses mutual guidance: one generates attention to modulate the other
+    - Finally concatenates all parts and projects to target output dimension
+    """
+    def __init__(self, inc, ouc, light=False):
+        super(CGF, self).__init__()
+
+        c1, c2 = inc
+        self.ouc = ouc
+        self.light = light
+
+        # Step 1: 统一通道数
+        self.align1 = Conv(c1, ouc, 3, 1, 1)
+        self.align2 = Conv(c2, ouc, 3, 1, 1)
+
+        # Step 2: 分割比例 —— 用 1/4 通道生成注意力
+        self.sp_part = ouc // 4
+        self.ch_part = ouc - self.sp_part
+
+        # Step 3: 注意力模块
+        self.spatial = Spatial(self.sp_part)
+        self.channel = Channel(self.ch_part)
+
+        # Step 4: 输出投影
+        self.conv_squeeze = Conv(ouc * 2, ouc, 1)
+        self.rep_conv = RepConv(ouc, ouc, 3, g=(16 if light else 1))
+        self.conv_final = Conv(ouc, ouc, 1)
+
+    def forward(self, inputs):
+        x1, x2 = inputs
+
+        # Step 1: 通道对齐（统一到相同维度）
+        x1_aligned = self.align1(x1)  # (B, ouc, H, W)
+        x2_aligned = self.align2(x2)  # (B, ouc, H, W)
+
+
+        # Step 2: 分割为注意力部分和特征部分
+        x1_sp, x1_ch = torch.split(x1_aligned, [self.sp_part, self.ch_part], dim=1)
+        x2_sp, x2_ch = torch.split(x2_aligned, [self.sp_part, self.ch_part], dim=1)
+
+        # Step 3: 用 x1 的注意力调制 x2
+        x2_sp_mod = x2_sp * self.spatial(x1_sp)          # (B, sp, H, W)
+        x2_ch_mod = x2_ch * self.channel(x1_ch)          # (B, ch, H, W)
+        x2_fused = torch.cat([x2_sp_mod, x2_ch_mod], dim=1)
+
+        # Step 4: 用 x2 的注意力调制 x1
+        x1_sp_mod = x1_sp * self.spatial(x2_sp)          # (B, sp, H, W)
+        x1_ch_mod = x1_ch * self.channel(x2_ch)          # (B, ch, H, W)
+        x1_fused = torch.cat([x1_sp_mod, x1_ch_mod], dim=1)
+
+        # Step 5: 拼接所有部分
+        out = torch.cat([x1_fused, x2_fused], dim=1)  # (B, 2*ouc, H, W)
+
+        # Step 6: 投影到目标输出通道
+        out = self.conv_squeeze(out)
+        
+        if not self.light:
+            out = self.rep_conv(out)
+    
+        out = self.conv_final(out)
+        
+        return out
+
+######################################## test end ########################################

@@ -1366,7 +1366,7 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
             c1 = [ch[x] for x in f]
             c2 = c1[0]
             args = [c1]
-        elif m in {HAFB, MFM}:
+        elif m in {HAFB, MFM, CGF}:
             if args[0] == 'head_channel':
                 args[0] = d[args[0]]
             c1 = [ch[x] for x in f]
