@@ -71,6 +71,8 @@ from .HFRB import HFRB
 from .EVA import EVA
 from .PlainUSR import RepMBConv, LocalAttention
 from .SFMB import SFMB
+import torch_dct as DCT
+
 
 from ultralytics.utils.ops import make_divisible
 from timm.layers import CondConv2d, trunc_normal_, use_fused_attn, to_2tuple
@@ -228,6 +230,50 @@ class CAF(nn.Module):
         out = self.proj_out(out)
         return y + out
     
+class DctFrequencyDecompose(nn.Module):
+    """
+    基于二维离散余弦变换（DCT）的频域分解模块。
+    将输入特征图分解为低频分量和高频分量。
+    
+    原理：
+    - DCT 能量集中在左上角（低频），右下角为高频。
+    - 通过构造左上角矩形 mask 提取低频，其余视为高频。
+    - 在频域加权后，通过 IDCT 重建空间域的低/高频图像。
+
+    Args:
+        ratio (list of float): [h_ratio, w_ratio]，控制保留低频区域的比例。
+                               例如 [0.5, 0.5] 表示保留左上角 50%×50% 的频域系数。
+    """
+    def __init__(self, ratio=[0.5, 0.5]):
+        super().__init__()
+        self.ratio = ratio
+
+    def forward(self, x):
+        """
+        Args:
+            x (Tensor): 输入张量，形状为 (B, C, H, W)
+        Returns:
+            x_low (Tensor): 低频分量，形状 (B, C, H, W)
+            x_high (Tensor): 高频分量，形状 (B, C, H, W)
+        """
+        B, C, H, W = x.shape
+        dct = DCT.dct_2d(x, norm='ortho')  # (B, C, H, W)
+
+        h0 = int(H * self.ratio[0])        
+        w0 = int(W * self.ratio[1])
+        weight_low = torch.zeros((H, W), device=x.device) # 创建 (H, W) 的全零张量作为频域 mask 模板
+        weight_low[:h0, :w0] = 1.0 # 将左上角 (h0 × w0) 区域设为 1.0，表示保留这些低频系数
+        
+        # 将 mask 扩展为 (B, C, H, W) 以匹配 dct 的形状，便于逐元素相乘
+        # .view(1,1,H,W) 添加 batch 和 channel 维度，.expand_as() 广播到实际大小
+        weight_low = weight_low.view(1, 1, H, W).expand_as(dct)
+
+        weight_high = 1.0 - weight_low # 高频 mask 是低频 mask 的补集
+
+        x_low = DCT.idct_2d(dct * weight_low, norm='ortho')
+        x_high = DCT.idct_2d(dct * weight_high, norm='ortho')
+
+        return x_low, x_high
 
 ######################## Common Module End ###################################
 
