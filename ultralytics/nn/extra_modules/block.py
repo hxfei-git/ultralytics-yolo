@@ -108,7 +108,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'A2C2f_EDFFN', 'C3k2_EBlock', 'C3k2_DBlock', 'C3k2_FDConv', 'C3k2_MambaOut_FDConv', 'C3k2_PFDConv', 'C3k2_PFDConv', 'C3k2_FasterFD', 'C3k2_DSAN', 'C3k2_MambaOut_DSA', 'C3k2_DSA', 'C3k2_DSAN_EDFFN', 'C3k2_RMB', 'SNI', 'GSConvE', 'C3k2_SFSConv', 'C3k2_MambaOut_SFSC',
            'C3k2_MambaOut_SFSC', 'C3k2_PSFSConv', 'C3k2_FasterSFSC', 'FCM', 'FCM_1', 'FCM_2', 'FCM_3', 'Pzconv', 'C3k2_GroupMamba', 'C3k2_GroupMambaBlock', 'C3k2_MambaVision', 'C3k2_wConv', 'wConv2d', 'PST', 'C3k2_FourierConv', 'FourierConv', 'C3k2_GLVSS', 'C3k2_ESC', 'C3k2_MBRConv5',
            'C3k2_MBRConv3', 'C3k2_VSSD', 'C3k2_TVIM', 'DPCF', 'C3k2_CSI', 'C3k2_SHSA_EPGO', 'C3k2_SHSA_EPGO_CGLU', 'C3k2_ConvAttn', 'C3k2_UniConvBlock', 'C3k2_LGLB', 'C3k2_ConverseB', 'C3k2_Converse', 'C3k2_GCConv', 'GCConv', 'MANet_GCConv', 'C3k2_CFBlock', 'C3k2_FMABlock', 'C3k2_LWGA',
-           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF',
+           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF', 'LFAFF',
            ]
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -16147,6 +16147,47 @@ class FAFF(nn.Module):
     def forward(self, x):
         # Step 1: 分解高低频
         x_low, x_high = self.decompose(x)
+
+        # 2. 生成注意力掩码（值域 [0,1]）
+        A_high = torch.sigmoid(x_high)      # 高频激励：突出边缘/纹理
+        A_low = torch.sigmoid(x_low)        # 低频响应：反映光照/背景
+
+        # Step 3: 门控抑制 —— 仅当“低频强 AND 高频弱”时才抑制（避免误杀目标）
+        gamma = self.gamma.clamp(min=0.1, max=5.0)  # 限制 gamma 范围
+        suppress_mask = A_low * (1.0 - A_high).pow(gamma)
+
+        # Step 4: 残差调制
+        modulation = A_high - suppress_mask
+        out = x + x * modulation
+
+        out = self.conv(out)
+
+        return out
+    
+class LFAFF(nn.Module):
+    """
+    Frequency-Aware Feature Fusion 频率感知特征融合：高频增强细节，低频抑制光照干扰。
+    """
+    def __init__(self, c1, c2=None):
+        super().__init__()
+        _c = c1 // 4
+        self.compress = nn.Conv2d(c1, _c, 1, bias=False)
+
+        self.decompose = DctFrequencyDecompose(ratio=[0.5, 0.5], remove_dc=True)
+
+        self.expand_high = nn.Conv2d(_c, c1, 1, bias=False)
+        self.expand_low  = nn.Conv2d(_c, c1, 1, bias=False)
+
+        self.gamma = nn.Parameter(torch.tensor(2.0))    # 可学习抑制强度
+        
+        self.conv = Conv(c1, c1, 1)                     # 1x1 卷积用于特征微调
+
+    def forward(self, x):
+        # Step 1: 分解高低频
+        x_reduced = self.compress(x)                # [B, c//4, H, W]
+        x_low, x_high = self.decompose(x_reduced)   # [B, c//4, H, W]
+        x_low  = self.expand_low(x_low)             # [B, c, H, W]
+        x_high = self.expand_high(x_high)           # [B, c, H, W]
 
         # 2. 生成注意力掩码（值域 [0,1]）
         A_high = torch.sigmoid(x_high)      # 高频激励：突出边缘/纹理
