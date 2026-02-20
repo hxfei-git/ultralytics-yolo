@@ -25,9 +25,9 @@ from ultralytics import YOLO
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train YOLO11 with optional YAML and name")
     parser.add_argument('--yaml', type=str,
-                        default='ultralytics/cfg/models/11/yolo11-CGF_1.yaml')
+                        default='ultralytics/cfg/models/11/yolo11-FAFF.yaml')
     parser.add_argument('--name', type=str,
-                        default='yolo11n-CGF_1')
+                        default='yolo11n-FAFF')
     args = parser.parse_args()
 
     model = YOLO(args.yaml)  # YOLO11

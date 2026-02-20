@@ -108,7 +108,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'A2C2f_EDFFN', 'C3k2_EBlock', 'C3k2_DBlock', 'C3k2_FDConv', 'C3k2_MambaOut_FDConv', 'C3k2_PFDConv', 'C3k2_PFDConv', 'C3k2_FasterFD', 'C3k2_DSAN', 'C3k2_MambaOut_DSA', 'C3k2_DSA', 'C3k2_DSAN_EDFFN', 'C3k2_RMB', 'SNI', 'GSConvE', 'C3k2_SFSConv', 'C3k2_MambaOut_SFSC',
            'C3k2_MambaOut_SFSC', 'C3k2_PSFSConv', 'C3k2_FasterSFSC', 'FCM', 'FCM_1', 'FCM_2', 'FCM_3', 'Pzconv', 'C3k2_GroupMamba', 'C3k2_GroupMambaBlock', 'C3k2_MambaVision', 'C3k2_wConv', 'wConv2d', 'PST', 'C3k2_FourierConv', 'FourierConv', 'C3k2_GLVSS', 'C3k2_ESC', 'C3k2_MBRConv5',
            'C3k2_MBRConv3', 'C3k2_VSSD', 'C3k2_TVIM', 'DPCF', 'C3k2_CSI', 'C3k2_SHSA_EPGO', 'C3k2_SHSA_EPGO_CGLU', 'C3k2_ConvAttn', 'C3k2_UniConvBlock', 'C3k2_LGLB', 'C3k2_ConverseB', 'C3k2_Converse', 'C3k2_GCConv', 'GCConv', 'MANet_GCConv', 'C3k2_CFBlock', 'C3k2_FMABlock', 'C3k2_LWGA',
-           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3'
+           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF',
            ]
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -229,51 +229,6 @@ class CAF(nn.Module):
 
         out = self.proj_out(out)
         return y + out
-    
-class DctFrequencyDecompose(nn.Module):
-    """
-    基于二维离散余弦变换（DCT）的频域分解模块。
-    将输入特征图分解为低频分量和高频分量。
-    
-    原理：
-    - DCT 能量集中在左上角（低频），右下角为高频。
-    - 通过构造左上角矩形 mask 提取低频，其余视为高频。
-    - 在频域加权后，通过 IDCT 重建空间域的低/高频图像。
-
-    Args:
-        ratio (list of float): [h_ratio, w_ratio]，控制保留低频区域的比例。
-                               例如 [0.5, 0.5] 表示保留左上角 50%×50% 的频域系数。
-    """
-    def __init__(self, ratio=[0.5, 0.5]):
-        super().__init__()
-        self.ratio = ratio
-
-    def forward(self, x):
-        """
-        Args:
-            x (Tensor): 输入张量，形状为 (B, C, H, W)
-        Returns:
-            x_low (Tensor): 低频分量，形状 (B, C, H, W)
-            x_high (Tensor): 高频分量，形状 (B, C, H, W)
-        """
-        B, C, H, W = x.shape
-        dct = DCT.dct_2d(x, norm='ortho')  # (B, C, H, W)
-
-        h0 = int(H * self.ratio[0])        
-        w0 = int(W * self.ratio[1])
-        weight_low = torch.zeros((H, W), device=x.device) # 创建 (H, W) 的全零张量作为频域 mask 模板
-        weight_low[:h0, :w0] = 1.0 # 将左上角 (h0 × w0) 区域设为 1.0，表示保留这些低频系数
-        
-        # 将 mask 扩展为 (B, C, H, W) 以匹配 dct 的形状，便于逐元素相乘
-        # .view(1,1,H,W) 添加 batch 和 channel 维度，.expand_as() 广播到实际大小
-        weight_low = weight_low.view(1, 1, H, W).expand_as(dct)
-
-        weight_high = 1.0 - weight_low # 高频 mask 是低频 mask 的补集
-
-        x_low = DCT.idct_2d(dct * weight_low, norm='ortho')
-        x_high = DCT.idct_2d(dct * weight_high, norm='ortho')
-
-        return x_low, x_high
 
 ######################## Common Module End ###################################
 
@@ -16134,3 +16089,79 @@ class CGF_3(nn.Module):
         return out
 
 ######################################## Cross-Guided Fusion end ########################################
+
+######################################## Frequency-Aware Feature Fusion 高频增强 + 低频抑制的频率调制融合模块 ########################################
+
+class DctFrequencyDecompose(nn.Module):
+    """
+    基于二维离散余弦变换（DCT）的频域分解模块，将输入特征图分解为低频分量和高频分量。
+    
+    原理：
+    - DCT 能量集中在左上角（低频），右下角为高频。
+    """
+    def __init__(self, ratio=[0.5, 0.5], remove_dc=False):
+        super().__init__()
+        self.ratio = ratio
+        self.remove_dc = remove_dc      
+    
+    def forward(self, x):
+        original_dtype = x.dtype
+        x = x.float()
+        B, C, H, W = x.shape
+        dct = DCT.dct_2d(x, norm='ortho')  # (B, C, H, W)
+    
+        if self.remove_dc:
+            dct = dct.clone()
+            dct[:, :, 0, 0] = 0.0          # 清除 DC 分量（即平均亮度），提升光照鲁棒性
+
+        h0 = int(H * self.ratio[0])        
+        w0 = int(W * self.ratio[1])
+        weight_low = torch.zeros((H, W), device=x.device) # 创建 (H, W) 的全零张量作为频域 mask 模板
+        weight_low[:h0, :w0] = 1.0 # 将左上角 (h0 × w0) 区域设为 1.0，表示保留这些低频系数
+        
+        # 将 mask 扩展为 (B, C, H, W) 以匹配 dct 的形状，便于逐元素相乘
+        # .view(1,1,H,W) 添加 batch 和 channel 维度，.expand_as() 广播到实际大小
+        weight_low = weight_low.view(1, 1, H, W).expand_as(dct)
+
+        weight_high = 1.0 - weight_low # 高频 mask 是低频 mask 的补集
+
+        x_low = DCT.idct_2d(dct * weight_low, norm='ortho')
+        x_high = DCT.idct_2d(dct * weight_high, norm='ortho')
+
+        x_low = x_low.to(original_dtype)
+        x_high = x_high.to(original_dtype)
+
+        return x_low, x_high
+
+class FAFF(nn.Module):
+    """
+    Frequency-Aware Feature Fusion 频率感知特征融合：高频增强细节，低频抑制光照干扰。
+    """
+    def __init__(self, c1, c2=None):
+        super().__init__()
+        c = c1
+        self.decompose = DctFrequencyDecompose(ratio=[0.5, 0.5], remove_dc=True)
+        self.gamma = nn.Parameter(torch.tensor(2.0))    # 可学习抑制强度
+        self.conv = Conv(c, c, 1)                       # 1x1 卷积用于特征微调
+
+    def forward(self, x):
+        # Step 1: 分解高低频
+        x_low, x_high = self.decompose(x)
+
+        # 2. 生成注意力掩码（值域 [0,1]）
+        A_high = torch.sigmoid(x_high)      # 高频激励：突出边缘/纹理
+        A_low = torch.sigmoid(x_low)        # 低频响应：反映光照/背景
+
+        # Step 3: 门控抑制 —— 仅当“低频强 AND 高频弱”时才抑制（避免误杀目标）
+        gamma = self.gamma.clamp(min=0.1, max=5.0)  # 限制 gamma 范围
+        suppress_mask = A_low * (1.0 - A_high).pow(gamma)
+
+        # Step 4: 残差调制
+        modulation = A_high - suppress_mask
+        out = x + x * modulation
+
+        out = self.conv(out)
+
+        return out
+
+######################################## Frequency-Aware Feature Fusion End ########################################
