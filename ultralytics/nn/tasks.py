@@ -1111,7 +1111,7 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
             DGCST, RepNCSPELAN4_CAA, SRFD, DRFD, RGCSPELAN, CSP_PTB, SimpleStem, VisionClueMerge, VSSBlock_YOLO, XSSBlock, GLSA, FeaturePyramidSharedConv,
             LDConv, CSP_MSCB, CSP_PMSFA, RFAConv, RFCBAMConv, RFCAConv, CSP_FreqSpatial, MANet, MANet_FasterBlock, MANet_FasterCGLU, 
             MANet_Star, PSConv, RepHMS, CSP_MSCB_SC, LoGStem, GSConvE, DSConv_YOLO13, wConv2d, FourierConv, Converse2D, GCConv, MANet_GCConv,
-            RepStem, ESMoE, SPDSlice, LSPDSlice, FED, LFED, EnhanceLocalSPPF, RES_EnhanceLocalSPPF, CAF_EnhanceLocalSPPF, CAF_RES_EnhanceLocalSPPF, FAFF, LFAFF,
+            RepStem, ESMoE, SPDSlice, LSPDSlice, FED, LFED, EnhanceLocalSPPF, RES_EnhanceLocalSPPF, CAF_EnhanceLocalSPPF, CAF_RES_EnhanceLocalSPPF, FAFF, LFAFF,FSCF
         ) + C3K2_CLASS + A2C2F_CLASS + C2PSA_CLASS):
             if args[0] == 'head_channel':
                 args[0] = d[args[0]]

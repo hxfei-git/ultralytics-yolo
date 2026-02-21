@@ -108,7 +108,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'A2C2f_EDFFN', 'C3k2_EBlock', 'C3k2_DBlock', 'C3k2_FDConv', 'C3k2_MambaOut_FDConv', 'C3k2_PFDConv', 'C3k2_PFDConv', 'C3k2_FasterFD', 'C3k2_DSAN', 'C3k2_MambaOut_DSA', 'C3k2_DSA', 'C3k2_DSAN_EDFFN', 'C3k2_RMB', 'SNI', 'GSConvE', 'C3k2_SFSConv', 'C3k2_MambaOut_SFSC',
            'C3k2_MambaOut_SFSC', 'C3k2_PSFSConv', 'C3k2_FasterSFSC', 'FCM', 'FCM_1', 'FCM_2', 'FCM_3', 'Pzconv', 'C3k2_GroupMamba', 'C3k2_GroupMambaBlock', 'C3k2_MambaVision', 'C3k2_wConv', 'wConv2d', 'PST', 'C3k2_FourierConv', 'FourierConv', 'C3k2_GLVSS', 'C3k2_ESC', 'C3k2_MBRConv5',
            'C3k2_MBRConv3', 'C3k2_VSSD', 'C3k2_TVIM', 'DPCF', 'C3k2_CSI', 'C3k2_SHSA_EPGO', 'C3k2_SHSA_EPGO_CGLU', 'C3k2_ConvAttn', 'C3k2_UniConvBlock', 'C3k2_LGLB', 'C3k2_ConverseB', 'C3k2_Converse', 'C3k2_GCConv', 'GCConv', 'MANet_GCConv', 'C3k2_CFBlock', 'C3k2_FMABlock', 'C3k2_LWGA',
-           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF', 'LFAFF',
+           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF', 'LFAFF', 'FSCF',
            ]
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -16203,6 +16203,29 @@ class LFAFF(nn.Module):
 
         out = self.conv(out)
 
+        return out
+
+class FSCF(nn.Module):
+    def __init__(self, c, c2=None):
+        super().__init__()
+        self.decompose = DctFrequencyDecompose(ratio=[0.5, 0.5], remove_dc=False)
+        
+        self.high_spatial = Spatial(c)
+        self.low_spatial  = Spatial(c)
+        
+        self.proj = Conv(2 * c, c, 1)
+
+    def forward(self, x):
+        x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
+
+
+        high_spatial_mask = self.high_spatial(x_high)      # [B, 1, H, W]
+        low_spatial_mask  = self.low_spatial(x_low)        # [B, 1, H, W]
+
+        x_high_fused = x * high_spatial_mask
+        x_low_fused  = x * low_spatial_mask 
+
+        out = self.proj(torch.cat([x_high_fused, x_low_fused], dim=1)  )
         return out
 
 ######################################## Frequency-Aware Feature Fusion End ########################################
