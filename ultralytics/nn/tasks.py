@@ -140,7 +140,7 @@ C3K2_CLASS = (C3k2_Faster, C3k2_ODConv, C3k2_Faster_EMA, C3k2_DBB, C3k2_DeepDBB,
               C3k2_TSSA, C3k2_SAVSS, C3k2_MobileMamba, C3k2_MambaOut, C3k2_MambaOut_UniRepLK, C3k2_EfficientVIM, C3k2_EfficientVIM_CGLU, C3k2_FAT, C3k2_LEGM, C3k2_RCB, C3k2_LFEM, C3k2_SBSM, C3k2_LSBlock, C3k2_MambaOut_LSConv, C3k2_TransMamba, C3k2_EVS,
               C3k2_EBlock, C3k2_DBlock, C3k2_FDConv, C3k2_MambaOut_FDConv, C3k2_PFDConv, C3k2_FasterFD, C3k2_DSAN, C3k2_MambaOut_DSA, C3k2_DSA, C3k2_DSAN_EDFFN, C3k2_RMB, C3k2_SFSConv, C3k2_MambaOut_SFSC, C3k2_PSFSConv, C3k2_FasterSFSC, C3k2_GroupMamba,
               C3k2_GroupMambaBlock, C3k2_MambaVision, DSC3k2, C3k2_wConv, C3k2_FourierConv, C3k2_GLVSS, C3k2_ESC, C3k2_MBRConv3, C3k2_MBRConv5, C3k2_VSSD, C3k2_TVIM, C3k2_CSI, C3k2_SHSA_EPGO, C3k2_SHSA_EPGO_CGLU, C3k2_ConvAttn, C3k2_UniConvBlock, C3k2_LGLB,
-              C3k2_ConverseB, C3k2_Converse, C3k2_GCConv, C3k2_CFBlock, C3k2_FMABlock, C3k2_LWGA, C3k2_CSSC, C3k2_CNCM, C3k2_HFRB, C3k2_EVA, C3k2_RMBC, C3k2_RMBC_LA, C3k2_IEL, C3k2_SFMB
+              C3k2_ConverseB, C3k2_Converse, C3k2_GCConv, C3k2_CFBlock, C3k2_FMABlock, C3k2_LWGA, C3k2_CSSC, C3k2_CNCM, C3k2_HFRB, C3k2_EVA, C3k2_RMBC, C3k2_RMBC_LA, C3k2_IEL, C3k2_SFMB, C3k2_CGFF
               )
 A2C2F_CLASS = (A2C2f, A2C2f_CGLU, A2C2f_KAN, A2C2f_DFFN, A2C2f_FRFN, A2C2f_DYT, A2C2f_CGLU_DYT, A2C2f_DFFN_DYT, A2C2f_FMFFN, A2C2f_FMFFN_DYT, A2C2f_SEFN, A2C2f_Mona, A2C2f_DFFN_DYT_Mona, A2C2f_SEFFN, A2C2f_EDFFN)
 C2PSA_CLASS = (C2PSA, C2BRA, C2CGA, C2DA, C2DPB, C2Pola, C2TSSA, C2ASSA, C2PSA_DYT, C2TSSA_DYT, C2Pola_DYT, C2PSA_FMFFN, C2PSA_CGLU, C2PSA_SEFN, C2PSA_Mona, C2PSA_SEFFN, C2TSSA_DYT_Mona, C2TSSA_DYT_Mona_SEFN, C2TSSA_DYT_Mona_SEFFN, C2PSA_EDFFN,
@@ -1111,7 +1111,7 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
             DGCST, RepNCSPELAN4_CAA, SRFD, DRFD, RGCSPELAN, CSP_PTB, SimpleStem, VisionClueMerge, VSSBlock_YOLO, XSSBlock, GLSA, FeaturePyramidSharedConv,
             LDConv, CSP_MSCB, CSP_PMSFA, RFAConv, RFCBAMConv, RFCAConv, CSP_FreqSpatial, MANet, MANet_FasterBlock, MANet_FasterCGLU, 
             MANet_Star, PSConv, RepHMS, CSP_MSCB_SC, LoGStem, GSConvE, DSConv_YOLO13, wConv2d, FourierConv, Converse2D, GCConv, MANet_GCConv,
-            RepStem, ESMoE, SPDSlice, LSPDSlice, FED, LFED, EnhanceLocalSPPF, RES_EnhanceLocalSPPF, CAF_EnhanceLocalSPPF, CAF_RES_EnhanceLocalSPPF, FAFF, LFAFF,FSCF
+            RepStem, ESMoE, SPDSlice, LSPDSlice, FED, LFED, EnhanceLocalSPPF, RES_EnhanceLocalSPPF, CAF_EnhanceLocalSPPF, CAF_RES_EnhanceLocalSPPF, FAFF, LFAFF, FSCF, CGFF
         ) + C3K2_CLASS + A2C2F_CLASS + C2PSA_CLASS):
             if args[0] == 'head_channel':
                 args[0] = d[args[0]]

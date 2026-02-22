@@ -78,7 +78,7 @@ from ultralytics.utils.ops import make_divisible
 from timm.layers import CondConv2d, trunc_normal_, use_fused_attn, to_2tuple
 from timm.models import named_apply
 
-__all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2_ODConv', 'Partial_conv3', 'C3k2_Faster_EMA', 'C3k2_DBB',
+__all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2_CGFF', 'C3k2_ODConv', 'Partial_conv3', 'C3k2_Faster_EMA', 'C3k2_DBB',
            'GSConv', 'GSConvns', 'VoVGSCSP', 'VoVGSCSPns', 'VoVGSCSPC', 'C3k2_CloAtt', 'SCConv', 'C3k2_SCConv', 'ScConv', 'C3k2_ScConv',
            'LAWDS', 'EMSConv', 'EMSConvP', 'C3k2_EMSC', 'C3k2_EMSCP', 'RCSOSA', 'C3k2_KW',
            'C3k2_DySnakeConv', 'DCNv2', 'C3k2_DCNv2', 'DCNV3_YOLO', 'C3k2_DCNv3', 'FocalModulation',
@@ -108,7 +108,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'A2C2f_EDFFN', 'C3k2_EBlock', 'C3k2_DBlock', 'C3k2_FDConv', 'C3k2_MambaOut_FDConv', 'C3k2_PFDConv', 'C3k2_PFDConv', 'C3k2_FasterFD', 'C3k2_DSAN', 'C3k2_MambaOut_DSA', 'C3k2_DSA', 'C3k2_DSAN_EDFFN', 'C3k2_RMB', 'SNI', 'GSConvE', 'C3k2_SFSConv', 'C3k2_MambaOut_SFSC',
            'C3k2_MambaOut_SFSC', 'C3k2_PSFSConv', 'C3k2_FasterSFSC', 'FCM', 'FCM_1', 'FCM_2', 'FCM_3', 'Pzconv', 'C3k2_GroupMamba', 'C3k2_GroupMambaBlock', 'C3k2_MambaVision', 'C3k2_wConv', 'wConv2d', 'PST', 'C3k2_FourierConv', 'FourierConv', 'C3k2_GLVSS', 'C3k2_ESC', 'C3k2_MBRConv5',
            'C3k2_MBRConv3', 'C3k2_VSSD', 'C3k2_TVIM', 'DPCF', 'C3k2_CSI', 'C3k2_SHSA_EPGO', 'C3k2_SHSA_EPGO_CGLU', 'C3k2_ConvAttn', 'C3k2_UniConvBlock', 'C3k2_LGLB', 'C3k2_ConverseB', 'C3k2_Converse', 'C3k2_GCConv', 'GCConv', 'MANet_GCConv', 'C3k2_CFBlock', 'C3k2_FMABlock', 'C3k2_LWGA',
-           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF', 'LFAFF', 'FSCF',
+           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF', 'LFAFF', 'FSCF', 'CGFF'
            ]
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -194,41 +194,140 @@ class Spatial(nn.Module):
         return x6
 
 class CAF(nn.Module):
+    """
+    Cross Attention Fusion (CAF)
+    功能：使用特征 x 作为 Query，去 attend 特征 y 的 Key 和 Value，
+          实现 x 对 y 的内容感知调制（cross-modulation）。
+    
+    典型用途：
+      - x = 高频特征（提供细节位置先验）
+      - y = 低频特征（提供语义内容）
+      → 让高频“告诉”低频：“你应该关注哪些区域”
+    
+    注意：这不是自注意力（Self-Attention），而是交叉注意力（Cross-Attention）。
+    """
     def __init__(self, c, heads=8):
         super().__init__()
         self.heads = heads
 
-        self.proj_q = nn.Conv2d(c, c, 1)
-        self.proj_k = nn.Conv2d(c, c, 1)
-        self.proj_v = nn.Conv2d(c, c, 1)
-        self.proj_out = Conv(c, c, 1, 1)
+        # Query 来自输入 x（引导信号）
+        self.proj_q = nn.Conv2d(c, c, 1)  # 1x1 卷积，生成 Q
+        # Key 和 Value 来自输入 y（被调制信号）
+        self.proj_k = nn.Conv2d(c, c, 1)  # 生成 K
+        self.proj_v = nn.Conv2d(c, c, 1)  # 生成 V
+        
+        # 输出投影 + 残差连接
+        self.proj_out = Conv(c, c, 1, 1)  # 可能包含激活/归一化（取决于你的 Conv 定义）
 
-        self.softmax = nn.Softmax(dim=-1)
+        self.softmax = nn.Softmax(dim=-1)  # 注意力权重归一化
 
     def forward(self, x, y):
+        """
+        Args:
+            x: [B, C, H, W] —— 引导信号（如高频），用于生成 Query
+            y: [B, C, H, W] —— 被调制信号（如低频），用于生成 Key/Value
+        Returns:
+            out: [B, C, H, W] —— 融合后的 y，受 x 引导
+        """
         B, C, H, W = y.shape
-        assert C % self.heads == 0
+        assert C % self.heads == 0, "通道数必须能被头数整除"
 
-        q = self.proj_q(x)
-        k = self.proj_k(y)
-        v = self.proj_v(y)
+        # 1. 投影生成 Q, K, V
+        q = self.proj_q(x)   # [B, C, H, W] —— 来自 x（引导者）
+        k = self.proj_k(y)   # [B, C, H, W] —— 来自 y（被引导者）
+        v = self.proj_v(y)   # [B, C, H, W]
 
-        head_dim = C // self.heads
-        scale    = head_dim ** -0.5
-        N        = H * W
+        head_dim = C // self.heads  # 每个注意力头的通道维度
+        scale    = head_dim ** -0.5  # 缩放因子，防止点积过大
+        N        = H * W             # 空间位置总数
 
-        q = q.view(B, self.heads, head_dim, N)
+        # 2. 重塑为多头格式: [B, heads, head_dim, N]
+        # 注意：这里将通道拆分为 heads × head_dim，并把空间展平为 N
+        q = q.view(B, self.heads, head_dim, N)  # [B, h, d, N]
         k = k.view(B, self.heads, head_dim, N)
         v = v.view(B, self.heads, head_dim, N)
 
-        attn = torch.matmul(q.transpose(-2, -1), k) * scale
-        attn = self.softmax(attn)
+        # 3. 计算注意力矩阵
+        # q^T @ k → [B, h, N, N]：每个 query 位置对所有 key 位置的相似度
+        attn = torch.matmul(q.transpose(-2, -1), k) * scale  # [B, h, N, N]
+        attn = self.softmax(attn)  # 在 key 维度（最后一维）归一化
 
-        out = torch.matmul(v, attn.transpose(-2, -1))
-        out = out.view(B, C, H, W)
+        # 4. 加权聚合 Value
+        # v @ attn^T → [B, h, d, N]：用注意力权重聚合 value
+        out = torch.matmul(v, attn.transpose(-2, -1))  # [B, h, d, N]
 
+        # 5. 恢复原始形状
+        out = out.view(B, C, H, W)  # [B, C, H, W]
+
+        # 6. 输出投影 + 残差连接（加的是 y，不是 x！）
         out = self.proj_out(out)
-        return y + out
+        return y + out  # 残差：保留原始 y，加上 cross-attention 的修正项
+    
+class BCM(nn.Module):
+    """
+    Bilateral Cross Modulation (BCM)
+    - x 和 y 各自生成 Q, K, V
+    - x 的 Q 查询 y 的 KV → 输出 y_refined
+    - y 的 Q 查询 x 的 KV → 输出 x_refined
+    - 融合两个 refined 特征
+    典型用途：
+      x = 高频(细节), y = 低频(结构)
+      → 高频指导低频聚焦边缘，低频指导高频保留语义区域
+    """
+    def __init__(self, c, heads=8):
+        super().__init__()
+        self.heads = heads
+        head_dim = c // heads
+        self.scale = head_dim ** -0.5
+
+        # x 的 QKV 投影
+        self.qkv_x = nn.Conv2d(c, c * 3, 1)
+        # y 的 QKV 投影
+        self.qkv_y = nn.Conv2d(c, c * 3, 1)
+
+        # 融合输出
+        self.proj = Conv(c * 2, c, 1)  # 拼接后投影回 c
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x, y):
+        B, C, H, W = x.shape
+        N = H * W
+        assert C % self.heads == 0
+
+        # ---- 从 x 生成 Qx, Kx, Vx ----
+        qkv_x = self.qkv_x(x).chunk(3, dim=1)  # (Qx, Kx, Vx), each [B, C, H, W]
+        q_x, k_x, v_x = qkv_x
+
+        # ---- 从 y 生成 Qy, Ky, Vy ----
+        qkv_y = self.qkv_y(y).chunk(3, dim=1)  # (Qy, Ky, Vy)
+        q_y, k_y, v_y = qkv_y
+
+        # reshape for multi-head: [B, heads, head_dim, N]
+        def reshape(t):
+            return t.view(B, self.heads, C // self.heads, N)
+
+        q_x, k_x, v_x = map(reshape, (q_x, k_x, v_x))
+        q_y, k_y, v_y = map(reshape, (q_y, k_y, v_y))
+
+        # ---- 双向交叉注意力 ----
+
+        # 1. x 引导 y：用 Qx 查询 Ky, Vy → refine y
+        attn_x2y = torch.matmul(q_x.transpose(-2, -1), k_y) * self.scale    # [B, h, N, N]
+        attn_x2y = self.softmax(attn_x2y)
+        y_refined = torch.matmul(v_y, attn_x2y.transpose(-2, -1))           # [B, h, d, N]
+
+        # 2. y 引导 x：用 Qy 查询 Kx, Vx → refine x\
+        attn_y2x = torch.matmul(q_y.transpose(-2, -1), k_x) * self.scale    # [B, h, N, N]
+        attn_y2x = self.softmax(attn_y2x)
+        x_refined = torch.matmul(v_x, attn_y2x.transpose(-2, -1))           # [B, h, d, N]
+
+        # reshape back to [B, C, H, W]
+        y_refined = y_refined.view(B, C, H, W)
+        x_refined = x_refined.view(B, C, H, W)
+
+        # 融合：拼接 + 投影
+        out = self.proj(torch.cat([x_refined, y_refined], dim=1))
+        return out
 
 ######################## Common Module End ###################################
 
@@ -16227,5 +16326,29 @@ class FSCF(nn.Module):
 
         out = self.proj(torch.cat([x_high_fused, x_low_fused], dim=1)  )
         return out
+
+class CGFF(nn.Module):
+    "Cross-Guided Frequency Fusion (CGFF)"
+    def __init__(self, c, c2=None):
+        super().__init__()
+        self.decompose = DctFrequencyDecompose(ratio=[0.5, 0.5], remove_dc=False)
+        
+        self.bcm = BCM(c, heads=8)
+        
+    def forward(self, x):
+        x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
+
+        out = self.bcm(x_high, x_low)  # x=high, y=low
+        return out
+
+
+class C3k2_CGFF(C3k2):
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__(c1, c2, n=n, c3k=c3k, e=e, g=g, shortcut=shortcut)
+        self.cgff = CGFF(c1)
+
+    def forward(self, x):
+        x = self.cgff(x)
+        return super().forward(x)
 
 ######################################## Frequency-Aware Feature Fusion End ########################################
