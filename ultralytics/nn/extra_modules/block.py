@@ -170,11 +170,12 @@ class Channel(nn.Module):
             1, 1, groups=dim
         )
         self.Apt = nn.AdaptiveAvgPool2d(1)
+        self.Mpt = nn.AdaptiveMaxPool2d(1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x2 = self.dwconv(x)
-        x5 = self.Apt(x2)
+        x5 = self.Apt(x2) + self.Mpt(x2)
         x6 = self.sigmoid(x5)
 
         return x6
