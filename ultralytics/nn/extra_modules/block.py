@@ -97,7 +97,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'C3k2_PPA', 'CSMHSA', 'SRFD', 'DRFD', 'CFC_CRB', 'SFC_G2', 'CGAFusion', 'CAFM', 'CAFMFusion', 'RGCSPELAN', 'C3k2_Faster_CGLU', 'SDFM', 'PSFM',
            'C3k2_Star', 'C3k2_Star_CAA', 'C3k2_KAN', 'EIEStem', 'C3k2_EIEM', 'ContextGuideFusionModule', 'C3k2_DEConv',
            'C3k2_SMPCGLU', 'C3k2_Heat', 'SBA', 'WaveletPool', 'WaveletUnPool', 'CSP_PTB', 'GLSA', 'CSPOmniKernel', 'WTConv2d', 'C3k2_WTConv',
-           'RCM', 'PyramidContextExtraction', 'DynamicInterpolationFusion', 'FuseBlockMulti', 'FeaturePyramidSharedConv', 'C3k2_FMB', 'LDConv', 'C3k2_gConv', 'C3k2_WDBB', 'C3k2_DeepDBB', 'EnhanceLocalSPPF', 'RES_EnhanceLocalSPPF',"CAF_EnhanceLocalSPPF", "CAF_RES_EnhanceLocalSPPF", "ASCSPP", "ACSPP", 
+           'RCM', 'PyramidContextExtraction', 'DynamicInterpolationFusion', 'FuseBlockMulti', 'FeaturePyramidSharedConv', 'C3k2_FMB', 'LDConv', 'C3k2_gConv', 'C3k2_WDBB', 'C3k2_DeepDBB', 'EnhanceLocalSPPF', 'RES_EnhanceLocalSPPF',"CAF_EnhanceLocalSPPF", "CAF_RES_EnhanceLocalSPPF", "ASCSPP", "ACSPP", "ACSPP_1", 
            'C3k2_AdditiveBlock', 'C3k2_AdditiveBlock_CGLU', 'CSP_MSCB', 'EUCB', 'C3k2_MSMHSA_CGLU', 'CSP_PMSFA', 'C3k2_MogaBlock', 'C3k2_SHSA', 'C3k2_SHSA_CGLU', 'C3k2_SMAFB', 'C3k2_SMAFB_CGLU',
            'DynamicAlignFusion', 'C3k2_IdentityFormer', 'C3k2_RandomMixing', 'C3k2_PoolingFormer', 'C3k2_ConvFormer', 'C3k2_CaFormer', 'C3k2_IdentityFormerCGLU', 'C3k2_RandomMixingCGLU', 'C3k2_PoolingFormerCGLU', 'C3k2_ConvFormerCGLU', 'C3k2_CaFormerCGLU',
            'C3k2_MutilScaleEdgeInformationEnhance', 'C3k2_FFCM', 'C3k2_SFHF', 'CSP_FreqSpatial', 'C3k2_MSM', 'C3k2_MutilScaleEdgeInformationSelect', 'C3k2_HDRAB', 'C3k2_RAB', 'C3k2_LFE', 'C3k2_FCA_SFA', 'C3k2_FCA_CTA', 'ConvEdgeFusion', 'MutilScaleEdgeInfoGenetator',
@@ -15964,6 +15964,46 @@ class ACSPP(nn.Module):  # Adaptive Shared Convolutional SPP
 
         out = torch.cat([x1, x2, x3, x4, global_feat], dim=1)
         return self.cv2(out)
+
+class ACSPP_1(nn.Module):
+    def __init__(self, c1, c2, k=3):
+        super().__init__()
+        c_ = c1 // 2
+        self.cv1 = Conv(c1, c_, 1, 1)
+        
+        # 串联的感受野增强分支
+        self.block1 = nn.Sequential(Conv(c_, c_, k, 1, g=c_), Conv(c_, c_, 1, 1))
+        self.block2 = nn.Sequential(Conv(c_, c_, k, 1, g=c_), Conv(c_, c_, 1, 1))
+        self.block3 = nn.Sequential(Conv(c_, c_, k, 1, g=c_), Conv(c_, c_, 1, 1))
+        
+        # 全局上下文分支 (Global Context Branch)
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        self.global_conv = nn.Sequential(
+            nn.Conv2d(c_, c_, 1, 1),
+            nn.Sigmoid()  # 关键：归一化权重
+        )
+        
+        # 融合层
+        self.cv2 = Conv(c_ * 4, c_, 1, 1) # 局部融合
+        self.cv3 = Conv(c_, c2, 1, 1)     # 最终输出
+
+    def forward(self, x):
+        x1 = self.cv1(x)
+        x2 = self.block1(x1)
+        x3 = self.block2(x2)
+        x4 = self.block3(x3)
+        
+        # 1. 局部多尺度特征拼接并压缩
+        out = self.cv2(torch.cat([x1, x2, x3, x4], dim=1))
+        
+        # 2. 计算全局权重 (利用广播机制省去 interpolate)
+        global_weight = self.global_conv(self.global_pool(x1))
+        
+        # 3. 动态特征调制 (Global-Guided Modulation)
+        # 这种残差形式 (1 + weight) 能保证即使全局分支没练好，基础特征也能流过
+        out = out * (1 + global_weight) 
+        
+        return self.cv3(out)
 
 class RES_EnhanceLocalSPPF(nn.Module):
 
