@@ -78,7 +78,7 @@ from ultralytics.utils.ops import make_divisible
 from timm.layers import CondConv2d, trunc_normal_, use_fused_attn, to_2tuple
 from timm.models import named_apply
 
-__all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2_CGFF', 'C3k2_ODConv', 'Partial_conv3', 'C3k2_Faster_EMA', 'C3k2_DBB',
+__all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2_CGFF','C3k2_CGFF_10','C3k2_CGFF_25','C3k2_CGFF_50','C3k2_CGFF_75','C3k2_CGFF_90', 'C3k2_ODConv', 'Partial_conv3', 'C3k2_Faster_EMA', 'C3k2_DBB',
            'GSConv', 'GSConvns', 'VoVGSCSP', 'VoVGSCSPns', 'VoVGSCSPC', 'C3k2_CloAtt', 'SCConv', 'C3k2_SCConv', 'ScConv', 'C3k2_ScConv',
            'LAWDS', 'EMSConv', 'EMSConvP', 'C3k2_EMSC', 'C3k2_EMSCP', 'RCSOSA', 'C3k2_KW',
            'C3k2_DySnakeConv', 'DCNv2', 'C3k2_DCNv2', 'DCNV3_YOLO', 'C3k2_DCNv3', 'FocalModulation',
@@ -16460,6 +16460,75 @@ class CGFF(nn.Module):
         out = self.bcm(x_high, x_low)  # x=high, y=low
         return out
 
+class CGFF_10(nn.Module):
+    "Cross-Guided Frequency Fusion (CGFF)"
+    def __init__(self, c, c2=None):
+        super().__init__()
+        self.decompose = DctFrequencyDecompose(ratio=[0.1, 0.1], remove_dc=False)
+        
+        self.bcm = BCM(c, heads=8)
+        
+    def forward(self, x):
+        x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
+
+        out = self.bcm(x_high, x_low)  # x=high, y=low
+        return out
+    
+class CGFF_25(nn.Module):
+    "Cross-Guided Frequency Fusion (CGFF)"
+    def __init__(self, c, c2=None):
+        super().__init__()
+        self.decompose = DctFrequencyDecompose(ratio=[0.25, 0.25], remove_dc=False)
+        
+        self.bcm = BCM(c, heads=8)
+        
+    def forward(self, x):
+        x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
+
+        out = self.bcm(x_high, x_low)  # x=high, y=low
+        return out
+
+class CGFF_50(nn.Module):
+    "Cross-Guided Frequency Fusion (CGFF)"
+    def __init__(self, c, c2=None):
+        super().__init__()
+        self.decompose = DctFrequencyDecompose(ratio=[0.5, 0.5], remove_dc=False)
+        
+        self.bcm = BCM(c, heads=8)
+        
+    def forward(self, x):
+        x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
+
+        out = self.bcm(x_high, x_low)  # x=high, y=low
+        return out
+    
+class CGFF_75(nn.Module):
+    "Cross-Guided Frequency Fusion (CGFF)"
+    def __init__(self, c, c2=None):
+        super().__init__()
+        self.decompose = DctFrequencyDecompose(ratio=[0.75, 0.75], remove_dc=False)
+        
+        self.bcm = BCM(c, heads=8)
+        
+    def forward(self, x):
+        x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
+
+        out = self.bcm(x_high, x_low)  # x=high, y=low
+        return out
+    
+class CGFF_90(nn.Module):
+    "Cross-Guided Frequency Fusion (CGFF)"
+    def __init__(self, c, c2=None):
+        super().__init__()
+        self.decompose = DctFrequencyDecompose(ratio=[0.9, 0.9], remove_dc=False)
+        
+        self.bcm = BCM(c, heads=8)
+        
+    def forward(self, x):
+        x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
+
+        out = self.bcm(x_high, x_low)  # x=high, y=low
+        return out
 
 class C3k2_CGFF(C3k2):
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
@@ -16469,5 +16538,51 @@ class C3k2_CGFF(C3k2):
     def forward(self, x):
         x = self.cgff(x)
         return super().forward(x)
+
+class C3k2_CGFF_10(C3k2):
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__(c1, c2, n=n, c3k=c3k, e=e, g=g, shortcut=shortcut)
+        self.cgff = CGFF_10(c1)
+
+    def forward(self, x):
+        x = self.cgff(x)
+        return super().forward(x)
+
+class C3k2_CGFF_25(C3k2):
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__(c1, c2, n=n, c3k=c3k, e=e, g=g, shortcut=shortcut)
+        self.cgff = CGFF_25(c1)
+
+    def forward(self, x):
+        x = self.cgff(x)
+        return super().forward(x)
+
+class C3k2_CGFF_50(C3k2):
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__(c1, c2, n=n, c3k=c3k, e=e, g=g, shortcut=shortcut)
+        self.cgff = CGFF_50(c1)
+
+    def forward(self, x):
+        x = self.cgff(x)
+        return super().forward(x)
+
+class C3k2_CGFF_75(C3k2):
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__(c1, c2, n=n, c3k=c3k, e=e, g=g, shortcut=shortcut)
+        self.cgff = CGFF_75(c1)
+
+    def forward(self, x):
+        x = self.cgff(x)
+        return super().forward(x)
+
+class C3k2_CGFF_90(C3k2):
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__(c1, c2, n=n, c3k=c3k, e=e, g=g, shortcut=shortcut)
+        self.cgff = CGFF_90(c1)
+
+    def forward(self, x):
+        x = self.cgff(x)
+        return super().forward(x)
+
 
 ######################################## Frequency-Aware Feature Fusion End ########################################
