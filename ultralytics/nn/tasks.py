@@ -1379,7 +1379,7 @@ def parse_model(d, ch, verbose=True, warehouse_manager=None):  # model_dict, inp
         elif m is SNI:
             c2, up_f = ch[f], args[0]
             args = [up_f]
-        elif m in {Pzconv, FCM, FCM_1, FCM_2, FCM_3}:
+        elif m in {Pzconv, FCM, FCM_1, FCM_2, FCM_3, CGFF_50}:
             c2 = ch[f]
             args = [c2]
         elif m in {GetIndexOutput}:

@@ -78,7 +78,7 @@ from ultralytics.utils.ops import make_divisible
 from timm.layers import CondConv2d, trunc_normal_, use_fused_attn, to_2tuple
 from timm.models import named_apply
 
-__all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2_CGFF','C3k2_CGFF_10','C3k2_CGFF_25','C3k2_CGFF_50','C3k2_CGFF_75','C3k2_CGFF_90', 'C3k2_ODConv', 'Partial_conv3', 'C3k2_Faster_EMA', 'C3k2_DBB',
+__all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster','C3k2_CGFF_10','C3k2_CGFF_25','C3k2_CGFF_50','C3k2_CGFF_75','C3k2_CGFF_90', 'C3k2_ODConv', 'Partial_conv3', 'C3k2_Faster_EMA', 'C3k2_DBB',
            'GSConv', 'GSConvns', 'VoVGSCSP', 'VoVGSCSPns', 'VoVGSCSPC', 'C3k2_CloAtt', 'SCConv', 'C3k2_SCConv', 'ScConv', 'C3k2_ScConv',
            'LAWDS', 'EMSConv', 'EMSConvP', 'C3k2_EMSC', 'C3k2_EMSCP', 'RCSOSA', 'C3k2_KW',
            'C3k2_DySnakeConv', 'DCNv2', 'C3k2_DCNv2', 'DCNV3_YOLO', 'C3k2_DCNv3', 'FocalModulation',
@@ -108,7 +108,7 @@ __all__ = ['DyHeadBlock', 'DyHeadBlockWithDCNV3', 'Fusion', 'C3k2_Faster', 'C3k2
            'A2C2f_EDFFN', 'C3k2_EBlock', 'C3k2_DBlock', 'C3k2_FDConv', 'C3k2_MambaOut_FDConv', 'C3k2_PFDConv', 'C3k2_PFDConv', 'C3k2_FasterFD', 'C3k2_DSAN', 'C3k2_MambaOut_DSA', 'C3k2_DSA', 'C3k2_DSAN_EDFFN', 'C3k2_RMB', 'SNI', 'GSConvE', 'C3k2_SFSConv', 'C3k2_MambaOut_SFSC',
            'C3k2_MambaOut_SFSC', 'C3k2_PSFSConv', 'C3k2_FasterSFSC', 'FCM', 'FCM_1', 'FCM_2', 'FCM_3', 'Pzconv', 'C3k2_GroupMamba', 'C3k2_GroupMambaBlock', 'C3k2_MambaVision', 'C3k2_wConv', 'wConv2d', 'PST', 'C3k2_FourierConv', 'FourierConv', 'C3k2_GLVSS', 'C3k2_ESC', 'C3k2_MBRConv5',
            'C3k2_MBRConv3', 'C3k2_VSSD', 'C3k2_TVIM', 'DPCF', 'C3k2_CSI', 'C3k2_SHSA_EPGO', 'C3k2_SHSA_EPGO_CGLU', 'C3k2_ConvAttn', 'C3k2_UniConvBlock', 'C3k2_LGLB', 'C3k2_ConverseB', 'C3k2_Converse', 'C3k2_GCConv', 'GCConv', 'MANet_GCConv', 'C3k2_CFBlock', 'C3k2_FMABlock', 'C3k2_LWGA',
-           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF', 'LFAFF', 'FSCF'
+           'C3k2_CSSC', 'C3k2_CNCM', 'C3k2_HFRB', 'C3k2_EVA', 'C3k2_RMBC', 'C3k2_RMBC_LA', 'C3k2_IEL', 'C3k2_SFMB', 'CGF_1', 'CGF_2', 'CGF_3', 'FAFF', 'LFAFF', 'FSCF', 'CGFF_50'
            ]
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -16515,15 +16515,6 @@ class CGFF_90(nn.Module):
 
         out = self.bcm(x_high, x_low)  # x=high, y=low
         return x + out
-
-class C3k2_CGFF(C3k2):
-    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
-        super().__init__(c1, c2, n=n, c3k=c3k, e=e, g=g, shortcut=shortcut)
-        self.cgff = CGFF(c1)
-
-    def forward(self, x):
-        x = self.cgff(x)
-        return super().forward(x)
 
 class C3k2_CGFF_10(C3k2):
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
