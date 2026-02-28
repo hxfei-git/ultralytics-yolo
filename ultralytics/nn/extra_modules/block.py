@@ -16324,9 +16324,9 @@ class DctFrequencyDecompose(nn.Module):
     
     def forward(self, x):
         original_dtype = x.dtype
-        x = x.float()
-        B, C, H, W = x.shape
-        dct = DCT.dct_2d(x, norm='ortho')  # (B, C, H, W)
+        y = x.float()
+        B, C, H, W = y.shape
+        dct = DCT.dct_2d(y, norm='ortho')  # (B, C, H, W)
     
         if self.remove_dc:
             dct = dct.clone()
@@ -16334,7 +16334,7 @@ class DctFrequencyDecompose(nn.Module):
 
         h0 = int(H * self.ratio[0])        
         w0 = int(W * self.ratio[1])
-        weight_low = torch.zeros((H, W), device=x.device) # 创建 (H, W) 的全零张量作为频域 mask 模板
+        weight_low = torch.zeros((H, W), device=y.device) # 创建 (H, W) 的全零张量作为频域 mask 模板
         weight_low[:h0, :w0] = 1.0 # 将左上角 (h0 × w0) 区域设为 1.0，表示保留这些低频系数
         
         # 将 mask 扩展为 (B, C, H, W) 以匹配 dct 的形状，便于逐元素相乘
@@ -16472,7 +16472,7 @@ class CGFF_10(nn.Module):
         x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
 
         out = self.bcm(x_high, x_low)  # x=high, y=low
-        return out
+        return x + out
     
 class CGFF_25(nn.Module):
     "Cross-Guided Frequency Fusion (CGFF)"
@@ -16486,7 +16486,7 @@ class CGFF_25(nn.Module):
         x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
 
         out = self.bcm(x_high, x_low)  # x=high, y=low
-        return out
+        return x + out
 
 class CGFF_50(nn.Module):
     "Cross-Guided Frequency Fusion (CGFF)"
@@ -16500,7 +16500,7 @@ class CGFF_50(nn.Module):
         x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
 
         out = self.bcm(x_high, x_low)  # x=high, y=low
-        return out
+        return x + out
     
 class CGFF_75(nn.Module):
     "Cross-Guided Frequency Fusion (CGFF)"
@@ -16514,7 +16514,7 @@ class CGFF_75(nn.Module):
         x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
 
         out = self.bcm(x_high, x_low)  # x=high, y=low
-        return out
+        return x + out
     
 class CGFF_90(nn.Module):
     "Cross-Guided Frequency Fusion (CGFF)"
@@ -16528,7 +16528,7 @@ class CGFF_90(nn.Module):
         x_low, x_high = self.decompose(x)  # 保留 DC 分量（重要语义）
 
         out = self.bcm(x_high, x_low)  # x=high, y=low
-        return out
+        return x + out
 
 class C3k2_CGFF(C3k2):
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
