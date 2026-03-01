@@ -25,9 +25,9 @@ from ultralytics import YOLO
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train YOLO11 with optional YAML and name")
     parser.add_argument('--yaml', type=str,
-                        default='ultralytics/cfg/models/11/yolo11-LSPDSlice_C3k2_CGFF-50_P5.yaml')
+                        default='ultralytics/cfg/models/11/yolo11-C3k2_CGFF_75-p5.yaml')
     parser.add_argument('--name', type=str,
-                        default='yolo11n-LSPDSlice_C3k2_CGFF-50_P5')
+                        default='yolo11n-C3k2_CGFF_75-p5')
     args = parser.parse_args()
 
     model = YOLO(args.yaml)  # YOLO11
@@ -36,15 +36,15 @@ if __name__ == '__main__':
         data='../datasets/voc-ai-tod.yaml',
         cache=False,
         imgsz=640,
-        epochs=10000,
-        batch=16,
-        close_mosaic=0,  # 最后多少个epoch关闭mosaic数据增强，设置0代表全程开启mosaic训练
-        workers=8,       # Windows下出现莫名其妙卡主的情况可以尝试把workers设置为0
-        # device='0,1',  # 指定显卡和多卡训练参考<YOLOV11配置文件.md>下方常见错误和解决方案
+        epochs=300,
+        batch=24,
+        close_mosaic=10,  # 最后多少个epoch关闭mosaic数据增强，设置0代表全程开启mosaic训练
+        workers=12,       # Windows下出现莫名其妙卡主的情况可以尝试把workers设置为0
+        # device='0,1',   # 指定显卡和多卡训练参考<YOLOV11配置文件.md>下方常见错误和解决方案
         optimizer='SGD',  # using SGD
-        # patience=0,    # set 0 to close earlystop.
-        # resume=True,   # 断点续训,YOLO初始化时选择last.pt,不懂就在百度云.txt找断点续训的视频
-        # amp=False,     # close amp | loss出现nan可以关闭amp
+        # patience=0,     # set 0 to close earlystop.
+        # resume=True,    # 断点续训,YOLO初始化时选择last.pt,不懂就在百度云.txt找断点续训的视频
+        # amp=False,      # close amp | loss出现nan可以关闭amp
         # fraction=0.2,
         project='runs/experiment',
         name=args.name,   # 使用命令行传入的名字（默认仍为 'yolo11n'）
