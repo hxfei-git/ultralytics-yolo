@@ -36,7 +36,7 @@ if __name__ == '__main__':
         data='../datasets/voc-ai-tod.yaml',
         cache=False,
         imgsz=640,
-        epochs=300,
+        epochs=800,
         batch=24,
         close_mosaic=10,  # 最后多少个epoch关闭mosaic数据增强，设置0代表全程开启mosaic训练
         workers=12,       # Windows下出现莫名其妙卡主的情况可以尝试把workers设置为0
