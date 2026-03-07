@@ -25,18 +25,18 @@ from ultralytics import YOLO
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train YOLO11 with optional YAML and name")
     parser.add_argument('--yaml', type=str,
-                        default='ultralytics/cfg/models/11/yolo11-ACSPP3_CGF2_BIFPN.yaml')
+                        default='ultralytics/cfg/models/11/yolo11.yaml')
     parser.add_argument('--name', type=str,
-                        default='yolo11n-ACSPP3_CGF2_BIFPN')
+                        default='yolov11n-VisDrone')
     args = parser.parse_args()
 
     model = YOLO(args.yaml)  # YOLO11
     # model.load('yolo11n.pt')  # loading pretrain weights
     model.train(
-        data='../datasets/voc-ai-tod.yaml',
+        data='../VisDrone/VisDrone.yaml',
         cache=False,
         imgsz=640,
-        epochs=1200,
+        epochs=1000,
         batch=16,
         close_mosaic=10,  # 最后多少个epoch关闭mosaic数据增强，设置0代表全程开启mosaic训练
         workers=8,       # Windows下出现莫名其妙卡主的情况可以尝试把workers设置为0
