@@ -1,55 +1,61 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-categories = ['AL', 'BR', 'ST', 'SH', 
-              'SP', 'VE', 'PE', 'WM']
+# 数据准备：更新为你的 N 规模模型数据
+categories = ['AL', 'BR', 'ST', 'SH', 'SP', 'VE', 'PE', 'WM']
+yolo_n = np.array([61.2, 26.0, 70.5, 63.5, 13.3, 64.9, 27.1, 7.4])
+ours_n = np.array([67.0, 28.4, 72.3, 66.0, 16.8, 66.8, 29.3, 13.3])
 
-yolo = np.array([61.2, 26.0, 70.5, 63.5, 13.3, 64.9, 27.1, 7.4])
-mtfe = np.array([67.0, 28.4, 72.3, 66.0, 16.8, 66.8, 29.3, 13.3])
-
+# 闭合雷达图路径
 angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False)
 angles = np.concatenate((angles, [angles[0]]))
+yolo_plot = np.concatenate((yolo_n, [yolo_n[0]]))
+ours_plot = np.concatenate((ours_n, [ours_n[0]]))
 
-yolo = np.concatenate((yolo, [yolo[0]]))
-mtfe = np.concatenate((mtfe, [mtfe[0]]))
+fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
 
-fig, ax = plt.subplots(figsize=(7,7), subplot_kw=dict(polar=True))
+# 1. 设置量程（根据 N 规模数据分布，0-85 比较合适）
+ax.set_ylim(0, 85)
 
-# ⭐ 关键1：提高下限（放大差异）
-ax.set_ylim(5, 80)
+# 2. 配色方案（论文常用：深蓝 vs 橘红）
+color_base = "#577FC1" 
+color_ours = "#D35400" 
 
-# ⭐ 关键2：柔和配色
-color1 = "#577FC1"
-color2 = "#DD8452"
+# 绘制 YOLOv11-N 曲线
+ax.plot(angles, yolo_plot, linewidth=2, label="YOLOv11-N", color=color_base, marker='o', markersize=4)
+ax.fill(angles, yolo_plot, alpha=0.1, color=color_base)
 
-ax.plot(angles, yolo, linewidth=2.5, label="YOLOv11-N", color=color1)
-ax.fill(angles, yolo, alpha=0.15, color=color1)
+# 绘制 MTFE-YOLO-N 曲线
+ax.plot(angles, ours_plot, linewidth=2.5, label="MTFE-YOLO-N", color=color_ours, marker='s', markersize=4)
+ax.fill(angles, ours_plot, alpha=0.2, color=color_ours)
 
-ax.plot(angles, mtfe, linewidth=2.5, label="MTFE-YOLO-N", color=color2)
-ax.fill(angles, mtfe, alpha=0.20, color=color2)
-
-# 网格样式
-ax.grid(color="gray", linestyle="--", linewidth=0.6, alpha=0.6)
-
-ax.set_xticks(angles[:-1])
-ax.set_xticklabels(categories, fontsize=10)
-
-ax.set_yticks([20,40,60,80])
-ax.set_yticklabels(['20','40','60','80'], fontsize=9)
-
-# ⭐ 关键3：标注提升值
+# 3. 标注提升值（核心修正：自动处理正负号）
 for i in range(len(categories)):
-    diff = mtfe[i] - yolo[i]
-    ax.text(angles[i], mtfe[i] + 2,
-            f"+{diff:.1f}",
-            ha='center',
-            va='center',
-            fontsize=9,
-            color="darkblue")
+    diff = ours_n[i] - yolo_n[i]
+    # 使用 :+.1f 格式化：正数带 +，负数带 -
+    # 位置设在两条线最高值上方 5 个单位处
+    text_pos = max(ours_n[i], yolo_n[i]) + 5
+    
+    ax.text(angles[i], text_pos, 
+            f"{diff:+.1f}", 
+            ha='center', 
+            va='center', 
+            fontsize=10, 
+            fontweight='bold',
+            color="#CA1417" if diff > 0 else "#32C71B") # 正值深绿，负值深红
 
-ax.legend(loc='upper right', bbox_to_anchor=(1.15,1.1))
-ax.set_title("mAP50 Comparison per Category", pad=20)
+# 网格与坐标轴设置
+ax.set_xticks(angles[:-1])
+ax.set_xticklabels(categories, fontsize=11, fontweight='bold')
+ax.set_yticks([20, 40, 60, 80])
+ax.set_yticklabels(['20', '40', '60', '80'], fontsize=10, color="gray")
+ax.grid(True, linestyle='--', alpha=0.5)
+
+# 图例与标题
+ax.legend(loc='upper right', bbox_to_anchor=(1.2, 1.1), fontsize=10)
+ax.set_title("Per-category mAP50 Comparison (N-scale)", pad=30, fontsize=14, fontweight='bold')
 
 plt.tight_layout()
-plt.savefig("radar_paper_style.png", dpi=300, bbox_inches='tight')
+# 保存图片
+plt.savefig("radar_n_scale.png", dpi=300, bbox_inches='tight')
 plt.show()
